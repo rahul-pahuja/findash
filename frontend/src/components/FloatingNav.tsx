@@ -27,7 +27,7 @@ export function ControlBar(props: ControlBarProps) {
       </div>
 
       <div className="toolbar-controls">
-        <div className="range-control" role="group" aria-label="Snapshot range">
+        <div className="range-control" role="group" aria-label="Date range">
           {RANGE_OPTIONS.map((option) => (
             <button
               key={option.key}

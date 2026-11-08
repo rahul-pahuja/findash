@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AnalyticsDashboard } from "./components/AnalyticsDashboard";
 import { Charts } from "./components/Charts";
 import { DataEntryModal } from "./components/DataEntryModal";
 import { ControlBar } from "./components/FloatingNav";
 import { IncomeSipModal } from "./components/IncomeSipModal";
 import { MetricCard } from "./components/MetricCard";
-import { SnapshotList } from "./components/SnapshotList";
 import { TableView } from "./components/TableView";
 import { StatusBanner } from "./components/StatusBanner";
 import { Sidebar } from "./components/Sidebar";
-import { XirrPanel } from "./components/XirrPanel";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import type { ApiError, DataResponse, Dataset, Entry, RangeKey, XirrResponse, TabKey } from "./lib/types";
 import { buildLocalDataResponse } from "./utils/derive";
@@ -43,8 +42,8 @@ export default function App() {
   const [incomeSipEntry, setIncomeSipEntry] = useState<Entry | null>(null);
   const [xirrLoading, setXirrLoading] = useState(false);
   const [xirrData, setXirrData] = useState<XirrResponse | null>(null);
+  const xirrRequestRef = useRef(0);
   const [mismatch, setMismatch] = useState(false);
-  const [viewMode, setViewMode] = useState<"list" | "table">("table");
   const [banner, setBanner] = useState<{ kind: "info" | "error" | "success"; message: string } | null>(null);
 
   useEffect(() => {
@@ -156,6 +155,7 @@ export default function App() {
   };
 
   async function handleAnalyze() {
+    const requestId = ++xirrRequestRef.current;
     setXirrLoading(true);
     try {
       const res = await fetch(`/api/xirr?range=${selectedRange}`, {
@@ -168,19 +168,19 @@ export default function App() {
         throw new Error(error.error || "Failed to analyze XIRR.");
       }
       const result = await res.json() as XirrResponse;
-      setXirrData(result);
+      if (requestId === xirrRequestRef.current) setXirrData(result);
     } catch (error) {
-      setBanner({ kind: "error", message: "Failed to analyze XIRR." });
+      if (requestId === xirrRequestRef.current) setBanner({ kind: "error", message: "Failed to analyze XIRR." });
     } finally {
-      setXirrLoading(false);
+      if (requestId === xirrRequestRef.current) setXirrLoading(false);
     }
   }
 
   useEffect(() => {
-    if (activeTab === "analytics" && !xirrLoading) {
+    if (activeTab === "analytics") {
       void handleAnalyze();
     }
-  }, [activeTab, selectedRange]);
+  }, [activeTab, selectedRange, dataset]);
 
   const visibleEntries = useMemo(() => {
     if (!response) return dataset.entries;
@@ -269,15 +269,19 @@ export default function App() {
                 </div>
               </section>
 
-              <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} primaryOnly />
+              <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} />
 
               <section className="recent-snapshots" aria-labelledby="recent-snapshots-title">
                 <div className="section-heading-row">
                   <div>
-                    <h2 id="recent-snapshots-title">Snapshot History</h2>
-                    <p>Recent balances recorded in your wealth file</p>
+                    <p className="section-eyebrow">Recent activity</p>
+                    <h2 id="recent-snapshots-title">Snapshot history</h2>
+                    <p>Balances and portfolio value from your latest records.</p>
                   </div>
-                  <button type="button" className="text-action" onClick={() => setActiveTab("history")}>View all snapshots <span aria-hidden="true">↗</span></button>
+                  <div className="recent-snapshots-actions">
+                    <span className="recent-snapshots-count">Latest {Math.min(4, visibleEntries.length)} of {visibleEntries.length}</span>
+                    <button type="button" className="text-action" onClick={() => setActiveTab("history")}>Full history</button>
+                  </div>
                 </div>
                 <TableView
                   entries={visibleEntries}
@@ -295,15 +299,14 @@ export default function App() {
           ) : null}
 
           {activeTab === "analytics" ? (
-            <div className="analytics-page page-enter">
-              <div className="page-section-header">
-                <p className="section-eyebrow">Portfolio performance</p>
-                <h1>Returns &amp; insights</h1>
-                <p>Annualized returns and the patterns behind your portfolio.</p>
-              </div>
-              <XirrPanel data={xirrData} loading={xirrLoading} range={selectedRange} masked={isPrivateMode} />
-              {response ? <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} /> : null}
-            </div>
+            <AnalyticsDashboard
+              response={response}
+              returns={xirrData}
+              returnsLoading={xirrLoading}
+              masked={isPrivateMode}
+              themeMode={themeMode}
+              onAddSnapshot={() => { setActiveEntry(null); setModalOpen(true); }}
+            />
           ) : null}
 
           {activeTab === "history" ? (
@@ -318,27 +321,19 @@ export default function App() {
               </div>
 
               <div className="history-toolbar">
-                <div className="view-toggle" role="group" aria-label="History view">
-                  <button type="button" className={viewMode === "table" ? "is-selected" : ""} aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>Table</button>
-                  <button type="button" className={viewMode === "list" ? "is-selected" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>Snapshots</button>
+                <div>
+                  <h2 className="history-table-title">All snapshots</h2>
+                  <p className="history-table-caption">Select a row action to edit balances or monthly contributions.</p>
                 </div>
-                <span className="range-summary">{response?.range.label ?? "All time"} · {visibleEntries.length} entries</span>
+                <span className="range-summary">{response?.range.label ?? "All time"} · {visibleEntries.length} {visibleEntries.length === 1 ? "record" : "records"}</span>
               </div>
 
-              {viewMode === "list" ? (
-                <SnapshotList
-                  entries={visibleEntries}
-                  onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
-                  onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
-                />
-              ) : (
-                <TableView
-                  entries={visibleEntries}
-                  masked={isPrivateMode}
-                  onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
-                  onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
-                />
-              )}
+              <TableView
+                entries={visibleEntries}
+                masked={isPrivateMode}
+                onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
+                onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
+              />
             </div>
           ) : null}
         </main>
@@ -357,15 +352,19 @@ export default function App() {
       <DataEntryModal
         open={modalOpen}
         entry={activeEntry}
+        entries={dataset.entries}
         onClose={() => setModalOpen(false)}
         onSave={(entry) => {
           setDataset((current) => {
             const nextEntries = [...current.entries];
-            const index = nextEntries.findIndex((item) => item.id === entry.id);
+            const index = activeEntry
+              ? nextEntries.findIndex((item) => item.id === activeEntry.id)
+              : nextEntries.findIndex((item) => item.id === entry.id);
+            const normalizedEntry = { ...entry, id: entry.date };
             if (index >= 0) {
-              nextEntries[index] = entry;
+              nextEntries[index] = normalizedEntry;
             } else {
-              nextEntries.push(entry);
+              nextEntries.push(normalizedEntry);
             }
             nextEntries.sort((a, b) => a.date.localeCompare(b.date));
             return {

@@ -31,7 +31,6 @@ export function MetricCard({ label, value, hint, info, featured = false }: Props
       <p className="metric-value" title={value}>{value}</p>
       <p className="metric-label">{label}</p>
       {hint ? <p className="metric-hint">{hint}</p> : null}
-      {featured ? <span className="metric-jump" aria-hidden="true">↗</span> : null}
     </article>
   );
 }
