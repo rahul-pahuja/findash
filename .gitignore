@@ -1,0 +1,63 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+
+# Editors and IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# Go build output, caches, and coverage
+/.gocache/
+/findash-app
+/findash-app-*
+*.test
+*.out
+*.prof
+*.cover
+/coverage.out
+/coverage.html
+
+# Frontend dependencies and generated output
+node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local runtime files and logs
+/.findash/
+*.log
+*.log.*
+/tmp/
+/temp/
+
+# Environment and machine-local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local financial data and backups
+/data.json
+/data.local.json
+/data.json.*
+/*.backup.json
+/*.bak
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3

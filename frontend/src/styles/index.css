@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #020617;
+  --card: #ffffff;
+  --card-foreground: #020617;
+  --popover: #ffffff;
+  --popover-foreground: #020617;
+  --primary: #0f172a;
+  --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --muted: #f8fafc;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --destructive: #ef4444;
+  --destructive-foreground: #f8fafc;
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #0f172a;
+  --radius: 0.5rem;
+
+  /* Chart colors — light mode defaults */
+  --chart-primary: #0f172a;
+  --chart-muted: #94a3b8;
+  --chart-grid: rgba(148, 163, 184, 0.05);
+  --chart-success: #10B981;
+  --chart-danger: #F43F5E;
+}
+
+.dark {
+  --background: #171520;
+  --foreground: #F3F2F5;
+  --card: #201D2C;
+  --card-foreground: #F3F2F5;
+  --popover: #201D2C;
+  --popover-foreground: #F3F2F5;
+  --primary: #9353D3;
+  --primary-foreground: #F3F2F5;
+  --secondary: #2A253B;
+  --secondary-foreground: #F3F2F5;
+  --muted: #2A253B;
+  --muted-foreground: #9490A3;
+  --accent: #2A253B;
+  --accent-foreground: #F3F2F5;
+  --destructive: #F43F5E;
+  --destructive-foreground: #F3F2F5;
+  --border: #2E2A3C;
+  --input: #2E2A3C;
+  --ring: #9353D3;
+
+  /* Chart colors — dark mode (purple palette) */
+  --chart-primary: #9353D3;
+  --chart-muted: #9490A3;
+  --chart-grid: rgba(148, 144, 163, 0.12);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: "Inter", -apple-system, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100vh;
+}
+@layer components {
+  /* ── Apple Liquid Glass ──────────────────────────────────
+     • Vibrant backdrop saturation boost
+     • Inner specular highlight on top edge
+     • Gradient border (light → transparent)
+     • Depth shadow with subtle color bleed
+  ────────────────────────────────────────────────────────── */
+  .glass-glance {
+    @apply backdrop-blur-[24px];
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.12) 0%,
+      rgba(255, 255, 255, 0.06) 100%
+    );
+    border: 0.5px solid rgba(255, 255, 255, 0.18);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.08),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.25),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.05);
+    -webkit-backdrop-filter: saturate(180%) blur(24px);
+    backdrop-filter: saturate(180%) blur(24px);
+  }
+  .dark .glass-glance {
+    background: linear-gradient(
+      135deg,
+      rgba(147, 83, 211, 0.12) 0%,
+      rgba(32, 29, 44, 0.25) 100%
+    );
+    border: 0.5px solid rgba(147, 83, 211, 0.18);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.4),
+      0 2px 8px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 0 rgba(147, 83, 211, 0.12),
+      inset 0 -1px 0 0 rgba(147, 83, 211, 0.04);
+    -webkit-backdrop-filter: saturate(200%) blur(24px);
+    backdrop-filter: saturate(200%) blur(24px);
+  }
+
+  .card-base {
+    @apply rounded-xl border border-border bg-card text-card-foreground shadow-sm;
+  }
+
+  /* ── Liquid Glass Hover ──────────────────────────────────
+     Applies to cards on hover — subtle glass lift + glow     */
+  .glass-hover {
+    @apply rounded-xl border border-transparent bg-card shadow-sm transition-all duration-300;
+  }
+  .glass-hover:hover {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.08) 0%,
+      rgba(255, 255, 255, 0.03) 100%
+    );
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.1),
+      0 2px 8px rgba(0, 0, 0, 0.06),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+      inset 0 -1px 0 0 rgba(255, 255, 255, 0.04);
+    transform: translateY(-1px);
+    border-color: rgba(255, 255, 255, 0.12);
+  }
+  .dark .glass-hover:hover {
+    background: linear-gradient(
+      135deg,
+      rgba(147, 83, 211, 0.10) 0%,
+      rgba(32, 29, 44, 0.18) 100%
+    );
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.3),
+      0 2px 8px rgba(0, 0, 0, 0.2),
+      inset 0 1px 0 0 rgba(147, 83, 211, 0.10),
+      inset 0 -1px 0 0 rgba(147, 83, 211, 0.03);
+    border-color: rgba(147, 83, 211, 0.18);
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors;
+  }
+
+  .nav-item-active {
+    @apply bg-secondary text-secondary-foreground;
+  }
+
+  .nav-item-inactive {
+    @apply text-muted-foreground hover:bg-secondary hover:text-secondary-foreground;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground opacity-100 hover:opacity-90;
+  }
+
+  .btn-outline {
+    @apply border border-border bg-background text-foreground hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .btn-ghost {
+    @apply text-muted-foreground hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .btn-icon {
+    @apply flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-all hover:bg-muted hover:text-foreground;
+  }
+
+  .chip-group {
+    @apply flex items-center gap-1 rounded-lg border border-border bg-background p-1;
+  }
+
+  .chip-item {
+    @apply rounded-md px-3 py-1 text-xs font-semibold uppercase tracking-wider transition-all;
+  }
+
+  .chip-item-active {
+    @apply bg-primary text-primary-foreground shadow-sm;
+  }
+
+  .field {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .field label {
+    @apply text-[10px] font-bold uppercase tracking-widest text-muted-foreground;
+  }
+
+  .field input,
+  .field textarea {
+    @apply rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-ring;
+  }
+}
