@@ -1,63 +1,55 @@
 import type { ReactNode } from "react";
-
-export type TabKey = "dashboard" | "history" | "analytics";
+import type { TabKey } from "../lib/types";
 
 interface SidebarProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
 }
 
+const navigation: Array<{ key: TabKey; label: string; icon: ReactNode }> = [
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m3.5 10.5 8.5-7 8.5 7v9a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1v-9Z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" /></svg>
+  },
+  {
+    key: "history",
+    label: "Snapshots",
+    icon: <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.35-5.66L4 9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M4 4v5h5m3-1v4l2.8 1.8" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  },
+  {
+    key: "analytics",
+    label: "Analytics",
+    icon: <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 19V5m0 14h16M7.5 15l3.1-4 3 2.1 5-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M15.5 7h3.2v3.2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+  }
+];
+
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   return (
-    <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r border-border bg-card lg:flex lg:flex-col">
-      <div className="flex h-16 items-center border-b border-border px-6">
-        <span className="text-lg font-bold tracking-tight text-foreground">FinDash</span>
-      </div>
+    <aside className="app-sidebar" aria-label="Main navigation">
+      <a className="brand-lockup" href="#dashboard" onClick={(event) => { event.preventDefault(); onTabChange("dashboard"); }} aria-label="FinDash dashboard">
+        <svg className="brand-mark" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+          <path d="M4.5 10.5 14 6l12.2 7.4 7.3-4.2 1.6 5.5-9 5.1-12.2-7.4-7.8 3.8-1.6-5.7Z" fill="currentColor" />
+          <path d="m5.2 21 8.9-4.3 12.3 7.5 7.4-4.3 1.3 5.8-8.9 5.1-12.3-7.5-7 3.4-1.7-5.7Z" fill="currentColor" />
+        </svg>
+        <span>Fin<span className="brand-light">Dash</span></span>
+      </a>
 
-      <nav className="flex-1 space-y-1 p-4">
-        <NavItem
-          label="Dashboard"
-          active={activeTab === "dashboard"}
-          onClick={() => onTabChange("dashboard")}
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-            </svg>
-          }
-        />
-        <NavItem
-          label="History"
-          active={activeTab === "history"}
-          onClick={() => onTabChange("history")}
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          }
-        />
-        <NavItem
-          label="Analytics"
-          active={activeTab === "analytics"}
-          onClick={() => onTabChange("analytics")}
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-          }
-        />
+      <p className="sidebar-caption">Personal finance</p>
+      <nav className="sidebar-nav">
+        {navigation.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`sidebar-link ${activeTab === item.key ? "is-active" : ""}`}
+            aria-current={activeTab === item.key ? "page" : undefined}
+            onClick={() => onTabChange(item.key)}
+          >
+            <span className="sidebar-link-icon">{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
       </nav>
     </aside>
-  );
-}
-
-function NavItem({ label, active, onClick, icon }: { label: string; active: boolean; onClick: () => void; icon: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`nav-item w-full ${active ? "nav-item-active" : "nav-item-inactive"}`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }

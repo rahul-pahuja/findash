@@ -14,6 +14,7 @@ interface Props {
   dataset: Dataset | null;
   masked: boolean;
   themeMode: "light" | "dark";
+  primaryOnly?: boolean;
 }
 
 // ── Asset Allocation Callout Plugin ──────────────────
@@ -26,6 +27,9 @@ const calloutPlugin = {
     const cy = meta.data[0]?.y;
     if (!cx || !cy) return;
 
+    const palette = getComputedStyle(document.documentElement);
+    const mutedColor = palette.getPropertyValue("--muted-foreground").trim() || "#77777d";
+    const borderColor = palette.getPropertyValue("--border").trim() || "#e2e2e5";
     ctx.save();
     
     const leftSide: any[] = [];
@@ -78,13 +82,13 @@ const calloutPlugin = {
         const finalX = isRight ? endX + elbowLen : endX - elbowLen;
         ctx.lineTo(finalX, endY);
         
-        ctx.strokeStyle = "rgba(148,144,163,0.4)";
+        ctx.strokeStyle = borderColor;
         ctx.lineWidth = 1.2;
         ctx.stroke();
         
         // Label
-        ctx.font = "bold 10px sans-serif";
-        ctx.fillStyle = "rgba(148,144,163,0.9)";
+        ctx.font = "500 11px -apple-system, BlinkMacSystemFont, sans-serif";
+        ctx.fillStyle = mutedColor;
         ctx.textAlign = isRight ? "left" : "right";
         ctx.textBaseline = "middle";
         ctx.fillText(item.label, isRight ? finalX + 5 : finalX - 5, endY);
@@ -100,7 +104,7 @@ const calloutPlugin = {
   }
 };
 
-export function Charts({ response, dataset, masked, themeMode }: Props) {
+export function Charts({ response, dataset, masked, themeMode, primaryOnly = false }: Props) {
   if (!response || !dataset) {
     return null;
   }
@@ -114,12 +118,15 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
   // Read chart colors from CSS variables — same in light and dark mode
   const s = getComputedStyle(document.documentElement);
   const CHART = {
-    primary: s.getPropertyValue("--chart-primary").trim() || "#9353D3",
-    muted: s.getPropertyValue("--chart-muted").trim() || "#9490A3",
-    grid: s.getPropertyValue("--chart-grid").trim() || "rgba(148,144,163,0.12)",
+    primary: s.getPropertyValue("--chart-primary").trim() || "#111111",
+    muted: s.getPropertyValue("--chart-muted").trim() || "#b8b8bd",
+    grid: s.getPropertyValue("--chart-grid").trim() || "rgba(20,20,24,0.08)",
     success: s.getPropertyValue("--chart-success").trim() || "#10B981",
     danger: s.getPropertyValue("--chart-danger").trim() || "#F43F5E",
   };
+  ChartJS.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif";
+  ChartJS.defaults.color = s.getPropertyValue("--muted-foreground").trim() || "#77777d";
+  const cardSurface = s.getPropertyValue("--card").trim() || "#ffffff";
 
   const lineData: ChartData<"line", number[], string> = {
     labels,
@@ -137,9 +144,10 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
           }
         },
         backgroundColor: `${CHART.primary}26`,
-        tension: 0.1,
+        tension: 0.24,
         fill: false,
-        pointRadius: 2,
+        borderWidth: 2.4,
+        pointRadius: 2.5,
         pointBackgroundColor: (ctx: any) => {
           const idx = ctx.dataIndex;
           const nw = response.derived[visibleEntries[idx].id]?.currentNetWorth ?? 0;
@@ -152,7 +160,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
         data: visibleEntries.map((entry) => response.derived[entry.id]?.hardCapital ?? 0),
         borderColor: CHART.muted,
         borderDash: [5, 5],
-        tension: 0.1,
+        tension: 0.24,
         fill: false,
         pointRadius: 0
       }
@@ -184,15 +192,14 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
           ...ASSET_KEYS.map((asset) => latest.market_assets[asset].current)
         ];
 
-        // Defined sequence of greens from most saturated to lightest (Emerald 800 to 50)
-        const greenShades = [
-          "#065f46", // Emerald 800
-          "#059669", // Emerald 600
-          "#10b981", // Emerald 500
-          "#34d399", // Emerald 400
-          "#6ee7b7", // Emerald 300
-          "#a7f3d0", // Emerald 200
-          "#ecfdf5", // Emerald 50
+        const neutralShades = [
+          "#111111",
+          "#404046",
+          "#707078",
+          "#96969d",
+          "#b8b8be",
+          "#d1d1d6",
+          "#e8e8ec",
         ];
 
         // Sort indices by value descending to map shades (largest value -> darkest shade)
@@ -203,7 +210,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
 
         const backgroundColors = new Array(data.length);
         sortedIndices.forEach((originalIndex, shadeIndex) => {
-          backgroundColors[originalIndex] = greenShades[Math.min(shadeIndex, greenShades.length - 1)];
+          backgroundColors[originalIndex] = neutralShades[Math.min(shadeIndex, neutralShades.length - 1)];
         });
 
         return {
@@ -213,7 +220,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
               data,
               backgroundColor: backgroundColors,
               borderWidth: 1,
-              borderColor: "var(--background)"
+              borderColor: cardSurface
             }
           ]
         };
@@ -236,7 +243,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
     datasets: [
       {
         label: "Available Liquidity",
-        data: visibleEntries.map((entry) => entry.liquid.bank + entry.hard_assets.fd + entry.hard_assets.stocks_wallet),
+        data: visibleEntries.map((entry) => entry.liquid.bank + entry.liquid.sodexo + entry.hard_assets.fd + entry.hard_assets.stocks_wallet),
         borderColor: CHART.success,
         backgroundColor: `${CHART.success}26`,
         tension: 0.3,
@@ -247,16 +254,16 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
   };
 
   return (
-    <section key={themeMode} className="grid gap-6 lg:grid-cols-2">
-      <ChartPanel title="Wealth Progression" info="Net Worth = liquid + hard assets + all market current values. Hard Capital = all principal you've invested. The gap between them is your unrealized gain.">
+    <section key={themeMode} className="chart-grid">
+      <ChartPanel title="Wealth Progression" subtitle="Net worth compared with contributed capital" className="chart-panel--progress" info="Net Worth is the current value of liquid, hard and market assets. Hard Capital is the cash and principal you have put in.">
         <Line
           data={lineData}
           options={buildMoneyOptions(masked, tooltipLabel)}
         />
       </ChartPanel>
 
-      <ChartPanel title="Asset Allocation" info="Donut showing how your net worth is split across liquid cash, FD, stocks wallet, mutual funds, NPS, stocks, and crypto.">
-        <div className="flex h-full items-center justify-center p-2">
+      <ChartPanel title="Asset Allocation" subtitle="How your latest net worth is distributed" className="chart-panel--allocation" info="A breakdown of current value across liquid cash, FD, stocks wallet, mutual funds, NPS, stocks and crypto.">
+        <div className="allocation-chart-wrap">
           {donutData ? (
             <Doughnut
               data={donutData}
@@ -266,7 +273,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
                 responsive: true,
                 maintainAspectRatio: false,
                 layout: {
-                  padding: 40 // Reduced padding to allow chart to be bigger
+                  padding: 26
                 },
                 plugins: {
                   legend: { display: false },
@@ -285,7 +292,8 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
         </div>
       </ChartPanel>
 
-      <ChartPanel title="Net Worth Change" info="Bar chart showing how much your net worth increased or decreased compared to the previous month. Green bars indicate gain, red indicate loss.">
+      {!primaryOnly ? <>
+      <ChartPanel title="Net Worth Change" subtitle="Change between recorded snapshots" info="Bars show how much net worth changed since the previous recorded snapshot. Green indicates growth; red indicates a decrease.">
         <Chart
           type="bar"
           data={netWorthChangeData}
@@ -320,7 +328,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
         />
       </ChartPanel>
 
-      <ChartPanel title="Available Liquidity" info="Shows the trend of your most accessible assets (Bank, FD, and Stocks Wallet) over time.">
+      <ChartPanel title="Available Liquidity" subtitle="Cash, fixed deposits and wallet balances" info="Tracks accessible assets across recorded snapshots: bank, Sodexo, FD and stocks wallet.">
         <Line
           data={liquidTimeData}
           options={buildMoneyOptions(masked, tooltipLabel)}
@@ -328,7 +336,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
       </ChartPanel>
 
       {/* ── Gain/Loss Heatmap ─────────────────────────────── */}
-      <ChartPanel title="Gain / Loss Heatmap" className="lg:col-span-2">
+      <ChartPanel title="Gain / Loss Heatmap" subtitle="Market asset performance against invested principal" className="chart-panel--heatmap">
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
@@ -369,25 +377,29 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
           </table>
         </div>
       </ChartPanel>
+      </> : null}
     </section>
   );
 }
 
 function ChartPanel({ title, subtitle, children, className, info }: { title: string; subtitle?: string; children: ReactNode; className?: string; info?: string }) {
   return (
-    <div className={`card-base glass-hover flex flex-col p-6 ${className ?? ""}`}>
-      <div className="flex items-center">
-        <h3 className="text-lg font-bold tracking-tight text-foreground">{title}</h3>
+    <article className={`dashboard-card chart-panel ${className ?? ""}`}>
+      <div className="chart-panel-heading">
+        <div>
+          <h3>{title}</h3>
+          {subtitle ? <p>{subtitle}</p> : null}
+        </div>
         {info ? <InfoTooltip text={info} /> : null}
       </div>
-      {subtitle ? <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p> : null}
-      <div className="mt-8 flex-1 min-h-[320px]">{children}</div>
-    </div>
+      <div className="chart-panel-content">{children}</div>
+    </article>
   );
 }
 
 function buildMoneyOptions(masked: boolean, tooltipLabel: (value: number) => string) {
   const grid = getComputedStyle(document.documentElement).getPropertyValue("--chart-grid").trim() || "rgba(148,144,163,0.12)";
+  const foreground = getComputedStyle(document.documentElement).getPropertyValue("--muted-foreground").trim() || "#77777d";
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -409,13 +421,18 @@ function buildMoneyOptions(masked: boolean, tooltipLabel: (value: number) => str
     scales: {
       y: {
         ticks: {
+          color: foreground,
+          font: { family: "-apple-system, BlinkMacSystemFont, sans-serif", size: 10 },
           callback(value: string | number) {
             return masked ? "" : `₹${value}`;
           }
         },
         grid: { color: grid }
       },
-      x: { grid: { display: false } }
+      x: {
+        ticks: { color: foreground, font: { family: "-apple-system, BlinkMacSystemFont, sans-serif", size: 10 } },
+        grid: { display: false }
+      }
     }
   };
 }

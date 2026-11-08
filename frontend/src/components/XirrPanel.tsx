@@ -10,10 +10,10 @@ interface Props {
 
 export function XirrPanel({ data, loading, range, masked }: Props) {
   return (
-    <section className="card-base">
+    <section className="card-base xirr-panel">
       <div className="border-b border-border p-6">
-        <h3 className="text-xl font-bold tracking-tight text-foreground">Deep Analytics</h3>
-        <p className="mt-1 text-sm text-muted-foreground">Annualized performance engine using Newton-Raphson solver · Range: {range}</p>
+        <h3 className="text-xl font-bold tracking-tight text-foreground">Portfolio returns</h3>
+        <p className="mt-1 text-sm text-muted-foreground">Annualized performance for {range === "ALL" ? "all recorded history" : `the last ${range}`}.</p>
       </div>
 
       <div className="p-6">
@@ -29,7 +29,7 @@ export function XirrPanel({ data, loading, range, masked }: Props) {
             </div>
 
             <div className="mt-4">
-              <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-4 ml-1">Asset Lens</h4>
+              <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 mb-4 ml-1">Returns by asset</h4>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 {Object.entries(data.perAsset.perAsset).map(([asset, value]) => {
                   const isPos = value.value !== null && value.value >= 0;

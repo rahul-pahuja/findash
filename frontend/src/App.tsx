@@ -7,11 +7,12 @@ import { MetricCard } from "./components/MetricCard";
 import { SnapshotList } from "./components/SnapshotList";
 import { TableView } from "./components/TableView";
 import { StatusBanner } from "./components/StatusBanner";
+import { Sidebar } from "./components/Sidebar";
 import { XirrPanel } from "./components/XirrPanel";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import type { ApiError, DataResponse, Dataset, Entry, RangeKey, XirrResponse, TabKey } from "./lib/types";
 import { buildLocalDataResponse } from "./utils/derive";
-import { formatCurrency, formatPercent } from "./utils/format";
+import { formatCompactCurrency, formatMonthLabel } from "./utils/format";
 
 const STORAGE_KEYS = {
   dataset: "findash.dataset",
@@ -30,7 +31,7 @@ function emptyDataset(): Dataset {
 export default function App() {
   const [dataset, setDataset] = useLocalStorageState<Dataset>(STORAGE_KEYS.dataset, emptyDataset());
   const [datasetTimestamp, setDatasetTimestamp] = useLocalStorageState<string>(STORAGE_KEYS.timestamp, "");
-  const [themeMode, setThemeMode] = useLocalStorageState<"light" | "dark">(STORAGE_KEYS.theme, "dark");
+  const [themeMode, setThemeMode] = useLocalStorageState<"light" | "dark">(STORAGE_KEYS.theme, "light");
   const [isPrivateMode, setIsPrivateMode] = useLocalStorageState<boolean>(STORAGE_KEYS.privacy, false);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
   const [selectedRange, setSelectedRange] = useState<RangeKey>("ALL");
@@ -192,184 +193,155 @@ export default function App() {
     return id ? response.derived[id] : null;
   }, [response]);
 
-  const trends = useMemo(() => {
-    if (!response || response.visibleEntryIds.length < 2) return null;
-    const ids = response.visibleEntryIds;
-    const curr = response.derived[ids[ids.length - 1]];
-    const prev = response.derived[ids[ids.length - 2]];
-    if (!curr || !prev) return null;
-
-    const calcPct = (c: number, p: number) => (p === 0 ? 0 : ((c - p) / Math.abs(p)) * 100);
-
-    return {
-      netWorth: { 
-        isPositive: curr.currentNetWorth >= prev.currentNetWorth, 
-        value: curr.currentNetWorth - prev.currentNetWorth,
-        percentage: calcPct(curr.currentNetWorth, prev.currentNetWorth)
-      },
-      hardCapital: { 
-        isPositive: curr.hardCapital >= prev.hardCapital, 
-        value: curr.hardCapital - prev.hardCapital,
-        percentage: calcPct(curr.hardCapital, prev.hardCapital)
-      },
-      liquidBuffer: { 
-        isPositive: curr.liquidBuffer >= prev.liquidBuffer, 
-        value: curr.liquidBuffer - prev.liquidBuffer,
-        percentage: calcPct(curr.liquidBuffer, prev.liquidBuffer)
-      },
-      unrealizedGain: { 
-        isPositive: curr.unrealizedGain >= prev.unrealizedGain, 
-        value: curr.unrealizedGain - prev.unrealizedGain,
-        percentage: calcPct(curr.unrealizedGain, prev.unrealizedGain)
-      }
-    };
-  }, [response]);
+  const latestMonthLabel = response?.summary.latestMonth
+    ? formatMonthLabel(response.summary.latestMonth)
+    : "No snapshot yet";
 
   return (
-    <div className="min-h-screen bg-background text-foreground transition-colors duration-300">
-      <div className="flex flex-col pb-32">
-        <input id="system-file-input" type="file" accept=".json" className="hidden" onChange={handleSystemFileLoad} />
+    <div className="findash-app">
+      <input id="system-file-input" type="file" accept=".json" className="hidden" onChange={handleSystemFileLoad} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        <main className="mx-auto w-full max-w-7xl space-y-12 p-6 lg:p-12">
-          {/* Header */}
-          <div className="flex flex-col gap-2">
-            <h1 className="text-4xl font-bold tracking-tighter text-foreground">FinDash</h1>
-            <p className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Local-First Wealth Studio</p>
-          </div>
+      <div className="findash-workspace">
+        <div className="workspace-toolbar-row">
+          <ControlBar
+            selectedRange={selectedRange}
+            onRangeChange={setSelectedRange}
+            isPrivateMode={isPrivateMode}
+            onTogglePrivate={() => setIsPrivateMode((current) => !current)}
+            themeMode={themeMode}
+            onToggleTheme={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
+            onSave={handleSave}
+            onLoad={handleLoad}
+            onSystemLoad={() => document.getElementById("system-file-input")?.click()}
+            statusText={statusText}
+            fileUpdated={response?.sync?.fileUpdated}
+          />
+        </div>
 
-          {activeTab === "dashboard" && response && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <MetricCard 
-                  label="Net Worth" 
-                  value={formatCurrency(response?.summary.latestNetWorth, isPrivateMode)} 
-                  hint={response?.summary.latestMonth} 
-                  info="Total assets minus liabilities. Sum of liquid, hard assets, and market portfolio current values."
-                  trend={trends?.netWorth}
-                />
-                <MetricCard 
-                  label="Hard Capital" 
-                  value={formatCurrency(response?.summary.latestHardCapital, isPrivateMode)} 
-                  hint="Total invested + savings" 
-                  info="Principal you've put in: liquid cash + FD + wallet + all market invested amounts. Excludes gains."
-                  trend={trends?.hardCapital}
-                />
-                <MetricCard 
-                  label="Liquid Buffer" 
-                  value={formatCurrency(response?.summary.latestLiquidBuffer, isPrivateMode)} 
-                  hint={latestVisible ? formatPercent(latestVisible.liquidBufferRatio, isPrivateMode) : "N/A"} 
-                  info="Easily accessible cash: bank balance + Sodexo. Ratio shows how many months of salary this covers."
-                  trend={trends?.liquidBuffer}
-                />
-                <MetricCard 
-                  label="Unrealized Gain" 
-                  value={formatCurrency(response?.summary.totalUnrealized, isPrivateMode)} 
-                  hint={latestVisible ? formatPercent(latestVisible.investmentVelocity, isPrivateMode) : "N/A"} 
-                  info="Paper profit: current net worth minus hard capital. Not realized until you sell. Velocity shows SIP as % of income."
-                  trend={trends?.unrealizedGain}
+        <main className="page-main">
+          {activeTab === "dashboard" && response ? (
+            <div className="dashboard-page page-enter">
+              <section className="overview-grid" aria-labelledby="quick-stats-title">
+                <div className="overview-intro">
+                  <p className="section-eyebrow">Personal finance · {latestMonthLabel}</p>
+                  <h1 id="quick-stats-title">Quick Stats</h1>
+                  <p>Your latest wealth snapshot, balances and investments in one view.</p>
+                </div>
+                <div className="metrics-grid">
+                  <MetricCard
+                    label="Net Worth"
+                    value={formatCompactCurrency(response.summary.latestNetWorth, isPrivateMode)}
+                    hint={latestMonthLabel}
+                    info="Total current value across liquid balances, hard assets and market holdings."
+                    featured
+                  />
+                  <MetricCard
+                    label="Hard Capital"
+                    value={formatCompactCurrency(response.summary.latestHardCapital, isPrivateMode)}
+                    hint="Cash + invested principal"
+                    info="Liquid balances, hard assets and principal invested across market holdings."
+                  />
+                  <MetricCard
+                    label="Liquid Buffer"
+                    value={formatCompactCurrency(response.summary.latestLiquidBuffer, isPrivateMode)}
+                    hint="Bank + Sodexo"
+                    info="Easily accessible cash from bank balances and Sodexo."
+                  />
+                  <MetricCard
+                    label="Market Portfolio"
+                    value={formatCompactCurrency(latestVisible?.marketExposure ?? 0, isPrivateMode)}
+                    hint="Current market value"
+                    info="Current value of mutual funds, NPS, stocks and crypto holdings."
+                  />
+                  <MetricCard
+                    label="Unrealized Gain"
+                    value={formatCompactCurrency(response.summary.totalUnrealized, isPrivateMode)}
+                    hint="Current value less principal"
+                    info="Current net worth minus hard capital. This is an unrealized portfolio gain or loss."
+                  />
+                  <MetricCard
+                    label="Snapshots"
+                    value={String(response.summary.entryCount)}
+                    hint={response.range.label}
+                    info="Recorded balance snapshots in the selected date range."
+                  />
+                </div>
+              </section>
+
+              <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} primaryOnly />
+
+              <section className="recent-snapshots" aria-labelledby="recent-snapshots-title">
+                <div className="section-heading-row">
+                  <div>
+                    <h2 id="recent-snapshots-title">Snapshot History</h2>
+                    <p>Recent balances recorded in your wealth file</p>
+                  </div>
+                  <button type="button" className="text-action" onClick={() => setActiveTab("history")}>View all snapshots <span aria-hidden="true">↗</span></button>
+                </div>
+                <TableView
+                  entries={visibleEntries}
+                  masked={isPrivateMode}
+                  maxRows={4}
+                  onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
+                  onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
                 />
               </section>
-              <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} />
             </div>
-          )}
+          ) : null}
 
-          {activeTab === "analytics" && (
-            <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <XirrPanel
-                data={xirrData}
-                loading={xirrLoading}
-                range={selectedRange}
-                masked={isPrivateMode}
-              />
+          {activeTab === "dashboard" && !response ? (
+            <div className="page-empty-state"><span className="empty-mark" aria-hidden="true">◌</span><h1>Preparing your dashboard</h1><p>{statusText === "Offline" ? "The local backend is offline. Start it to load your wealth data." : "Loading your latest snapshot."}</p></div>
+          ) : null}
+
+          {activeTab === "analytics" ? (
+            <div className="analytics-page page-enter">
+              <div className="page-section-header">
+                <p className="section-eyebrow">Portfolio performance</p>
+                <h1>Returns &amp; insights</h1>
+                <p>Annualized returns and the patterns behind your portfolio.</p>
+              </div>
+              <XirrPanel data={xirrData} loading={xirrLoading} range={selectedRange} masked={isPrivateMode} />
+              {response ? <Charts response={response} dataset={response.dataset} masked={isPrivateMode} themeMode={themeMode} /> : null}
             </div>
-          )}
+          ) : null}
 
-          {activeTab === "history" && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setViewMode("list")}
-                    className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                      viewMode === "list" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    Snapshot List
-                  </button>
-                  <button
-                    onClick={() => setViewMode("table")}
-                    className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
-                      viewMode === "table" ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground hover:bg-muted"
-                    }`}
-                  >
-                    Tabular View
-                  </button>
+          {activeTab === "history" ? (
+            <div className="history-page page-enter">
+              <div className="history-page-header">
+                <div className="page-section-header">
+                  <p className="section-eyebrow">Your money over time</p>
+                  <h1>Snapshot History</h1>
+                  <p>Review balances and contributions across your saved snapshots.</p>
                 </div>
-                <button
-                  className="rounded-full bg-primary/10 px-4 py-2 text-xs font-bold text-primary hover:bg-primary/20 transition-all"
-                  onClick={() => {
-                    setActiveEntry(null);
-                    setModalOpen(true);
-                  }}
-                >
-                  + Add Snapshot
-                </button>
+                <button type="button" className="primary-action" onClick={() => { setActiveEntry(null); setModalOpen(true); }}>Add snapshot <span aria-hidden="true">＋</span></button>
+              </div>
+
+              <div className="history-toolbar">
+                <div className="view-toggle" role="group" aria-label="History view">
+                  <button type="button" className={viewMode === "table" ? "is-selected" : ""} aria-pressed={viewMode === "table"} onClick={() => setViewMode("table")}>Table</button>
+                  <button type="button" className={viewMode === "list" ? "is-selected" : ""} aria-pressed={viewMode === "list"} onClick={() => setViewMode("list")}>Snapshots</button>
+                </div>
+                <span className="range-summary">{response?.range.label ?? "All time"} · {visibleEntries.length} entries</span>
               </div>
 
               {viewMode === "list" ? (
                 <SnapshotList
                   entries={visibleEntries}
-                  onAdd={() => {
-                    setActiveEntry(null);
-                    setModalOpen(true);
-                  }}
-                  onEdit={(entry) => {
-                    setActiveEntry(entry);
-                    setModalOpen(true);
-                  }}
-                  onEditIncomeSip={(entry) => {
-                    setIncomeSipEntry(entry);
-                    setIncomeSipOpen(true);
-                  }}
+                  onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
+                  onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
                 />
               ) : (
-                <TableView 
-                  entries={visibleEntries} 
-                  masked={isPrivateMode} 
-                  onEdit={(entry) => {
-                    setActiveEntry(entry);
-                    setModalOpen(true);
-                  }}
-                  onEditIncomeSip={(entry) => {
-                    setIncomeSipEntry(entry);
-                    setIncomeSipOpen(true);
-                  }}
+                <TableView
+                  entries={visibleEntries}
+                  masked={isPrivateMode}
+                  onEdit={(entry) => { setActiveEntry(entry); setModalOpen(true); }}
+                  onEditIncomeSip={(entry) => { setIncomeSipEntry(entry); setIncomeSipOpen(true); }}
                 />
               )}
             </div>
-          )}
+          ) : null}
         </main>
-      </div>
-
-      <ControlBar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        selectedRange={selectedRange}
-        onRangeChange={setSelectedRange}
-        isPrivateMode={isPrivateMode}
-        onTogglePrivate={() => setIsPrivateMode((current) => !current)}
-        themeMode={themeMode}
-        onToggleTheme={() => setThemeMode((current) => (current === "dark" ? "light" : "dark"))}
-        onSave={handleSave}
-        onLoad={handleLoad}
-        onSystemLoad={() => document.getElementById("system-file-input")?.click()}
-      />
-
-      {/* Sync Status Overlay */}
-      <div className="fixed bottom-8 right-8 z-40 hidden xl:block animate-in fade-in slide-in-from-right-4 duration-700">
-        <div className="rounded-full border border-border bg-background/60 px-4 py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground shadow-lg backdrop-blur-xl">
-          {statusText} • {response?.sync?.fileExists ? `Sync: ${new Date(response.sync.fileUpdated).toLocaleTimeString()}` : "Offline"}
-        </div>
       </div>
 
       {banner ? <StatusBanner kind={banner.kind} message={banner.message} onDismiss={() => setBanner(null)} /> : null}

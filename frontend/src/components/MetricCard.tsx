@@ -1,4 +1,3 @@
-import { ReactNode } from "react";
 import { InfoTooltip } from "./InfoTooltip";
 
 interface Props {
@@ -6,46 +5,33 @@ interface Props {
   value: string;
   hint?: string;
   info?: string;
-  trend?: {
-    value: number;
-    percentage: number;
-    isPositive: boolean;
-  } | null;
+  featured?: boolean;
 }
 
-export function MetricCard({ label, value, hint, info, trend }: Props) {
+const metricPaths: Record<string, string> = {
+  "Net Worth": "M12 2.5v19m5-14H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6",
+  "Hard Capital": "M4 19h16M6 16V9m6 7V5m6 11v-4M5 7l6-4 7 3",
+  "Liquid Buffer": "M3.5 7.5h17v12h-17zM3.5 10.5h17m-13 5h4M7 4.5h10",
+  "Market Portfolio": "M4 7.5h16v12H4zM7 7.5v-3h10v3m-10 5h3m3 0h3m-9 4h3m3 0h3",
+  "Unrealized Gain": "m4 16 5-5 3 3 8-9M14 5h6v6M4 20h16",
+  Snapshots: "M6 3.5h12a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2Zm3 5h6m-6 4h6m-6 4h4"
+};
+
+export function MetricCard({ label, value, hint, info, featured = false }: Props) {
   return (
-    <div className="card-base glass-hover flex flex-col p-6">
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/80">{label}</span>
-          {info && <InfoTooltip text={info} />}
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-1 text-[10px] font-bold ${trend.isPositive ? "text-success" : "text-danger"}`}>
-            <div className="flex items-center gap-0.5">
-              {trend.isPositive ? (
-                <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 3l-7 9h14l-7-9z" />
-                </svg>
-              ) : (
-                <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10 17l7-9H3l7 9z" />
-                </svg>
-              )}
-              <span>{Math.abs(trend.percentage).toFixed(1)}%</span>
-            </div>
-          </div>
-        )}
+    <article className={`metric-card ${featured ? "is-featured" : ""}`}>
+      <div className="metric-card-head">
+        <span className="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+            <path d={metricPaths[label] ?? metricPaths.Snapshots} />
+          </svg>
+        </span>
+        {info ? <InfoTooltip text={info} /> : null}
       </div>
-      
-      <div className="flex items-baseline gap-2">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground tabular-nums">{value}</h2>
-      </div>
-      
-      {hint && (
-        <p className="mt-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">{hint}</p>
-      )}
-    </div>
+      <p className="metric-value" title={value}>{value}</p>
+      <p className="metric-label">{label}</p>
+      {hint ? <p className="metric-hint">{hint}</p> : null}
+      {featured ? <span className="metric-jump" aria-hidden="true">↗</span> : null}
+    </article>
   );
 }
