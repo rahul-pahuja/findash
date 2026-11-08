@@ -1,11 +1,14 @@
-import type { ChartOptions } from "chart.js";
-import { Chart as ChartJS, Filler, registerables } from "chart.js";
-import { Line } from "react-chartjs-2";
-import type { DataResponse, Entry, XirrResponse } from "../lib/types";
-import { ASSET_KEYS, ASSET_LABELS } from "../utils/config";
-import { formatCompactCurrency, formatCurrency, formatMonthLabel } from "../utils/format";
+import type { ChartData, ChartOptions, Plugin } from "chart.js";
+import { Chart as ChartJS, registerables } from "chart.js";
+import { Chart } from "react-chartjs-2";
+import type { DataResponse, Entry, RangeKey, XirrResponse } from "../lib/types";
+import { InfoTooltip } from "./InfoTooltip";
+import { CompactCurrency } from "./CompactCurrency";
+import { RANGE_OPTIONS, ASSET_KEYS, ASSET_LABELS, getAssetPalette, getLiquidityPalette } from "../utils/config";
+import { formatChartMonth, formatCompactCurrency, formatCurrency, formatDateLabel, formatSigned, formatSignedPercent, getNiceAxisBounds } from "../utils/format";
+import { getSnapshotTotals, selectPeriod } from "../utils/insights";
 
-ChartJS.register(...registerables, Filler);
+ChartJS.register(...registerables);
 
 interface Props {
   response: DataResponse | null;
@@ -13,328 +16,286 @@ interface Props {
   returnsLoading: boolean;
   masked: boolean;
   themeMode: "light" | "dark";
-  onAddSnapshot: () => void;
+  selectedRange: RangeKey;
+  onRangeChange: (range: RangeKey) => void;
 }
 
-function netWorth(entry: Entry) {
-  return entry.liquid.bank + entry.liquid.sodexo + entry.hard_assets.fd + entry.hard_assets.stocks_wallet
-    + ASSET_KEYS.reduce((sum, asset) => sum + entry.market_assets[asset].current, 0);
+function fullDate(date: string) {
+  return formatDateLabel(date);
 }
 
-function signedCurrency(value: number, masked: boolean) {
-  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-  return `${sign}${formatCurrency(Math.abs(value), masked)}`;
-}
-
-function periodChange(first: Entry | undefined, latest: Entry | undefined) {
-  if (!first || !latest) return null;
-  return netWorth(latest) - netWorth(first);
-}
-
-export function AnalyticsDashboard({ response, returns, returnsLoading, masked, themeMode, onAddSnapshot }: Props) {
-  const entries = response
-    ? response.dataset.entries.filter((entry) => response.visibleEntryIds.includes(entry.id))
-    : [];
-  const first = entries[0];
-  const latest = entries[entries.length - 1];
-  const heatmapEntries = [...entries].sort((a, b) => b.date.localeCompare(a.date));
-  const change = periodChange(first, latest);
-  const total = latest ? netWorth(latest) : 0;
-  const firstNetWorth = first ? netWorth(first) : 0;
-  const capitalChange = first && latest && response
-    ? (response.derived[latest.id]?.hardCapital ?? 0) - (response.derived[first.id]?.hardCapital ?? 0)
-    : 0;
-  const marketChange = change === null ? 0 : change - capitalChange;
+export function AnalyticsDashboard({ response, returns, returnsLoading, masked, themeMode, selectedRange, onRangeChange }: Props) {
+  const dataset = response?.dataset;
+  const assetColors = getAssetPalette(themeMode);
+  const liquidityColors = getLiquidityPalette(themeMode);
+  const allEntries = dataset ? [...dataset.entries].sort((a, b) => a.date.localeCompare(b.date)) : [];
+  const period = selectPeriod(allEntries, selectedRange);
+  const entries = period.entries;
+  const anchor = period.anchor;
+  const latest = period.latest;
+  const latestTotals = latest ? getSnapshotTotals(latest) : null;
+  const anchorTotals = anchor ? getSnapshotTotals(anchor) : null;
+  const change = latestTotals && anchorTotals ? latestTotals.netWorth - anchorTotals.netWorth : null;
+  const changePercent = anchorTotals && anchorTotals.netWorth > 0 && change !== null ? change / anchorTotals.netWorth : null;
+  const hardCapitalChange = latestTotals && anchorTotals ? latestTotals.hardCapital - anchorTotals.hardCapital : 0;
+  const unrealizedChange = latestTotals && anchorTotals ? latestTotals.unrealizedGain - anchorTotals.unrealizedGain : 0;
+  const absoluteMovement = Math.abs(hardCapitalChange) + Math.abs(unrealizedChange);
+  const capitalShare = absoluteMovement > 0 ? Math.abs(hardCapitalChange) / absoluteMovement * 100 : 0;
+  const marketShare = absoluteMovement > 0 ? Math.abs(unrealizedChange) / absoluteMovement * 100 : 0;
+  const netWorthColor = themeMode === "dark" ? "#91A3FF" : "#2447F5";
+  const marketFill = themeMode === "dark" ? "rgba(104,120,179,.28)" : "rgba(184,196,255,.55)";
   const liquidity = latest ? [
-    { label: "Fixed deposit", value: latest.hard_assets.fd },
-    { label: "Bank balance", value: latest.liquid.bank },
-    { label: "Stocks wallet", value: latest.hard_assets.stocks_wallet },
-    { label: "Sodexo / other", value: latest.liquid.sodexo }
+    { key: "bank", label: "Bank balance", value: latest.liquid.bank, color: liquidityColors.bank },
+    { key: "sodexo", label: "Sodexo / other cash", value: latest.liquid.sodexo, color: liquidityColors.sodexo },
+    { key: "fd", label: "Fixed deposit", value: latest.hard_assets.fd, color: liquidityColors.fd },
+    { key: "stocks_wallet", label: "Stocks wallet", value: latest.hard_assets.stocks_wallet, color: liquidityColors.stocks_wallet }
   ] : [];
   const availableLiquidity = liquidity.reduce((sum, item) => sum + item.value, 0);
-  const firstLabel = first ? formatMonthLabel(first.id) : "the first snapshot";
-  const latestLabel = latest ? formatMonthLabel(latest.id) : "";
-  const netWorthValues = entries.map(netWorth);
-  const minValue = Math.min(...netWorthValues);
-  const maxValue = Math.max(...netWorthValues);
-  const chartSpan = Math.max(maxValue - minValue, Math.abs(maxValue) * .1, 1);
-  const chartMin = Math.max(0, minValue - chartSpan * .1);
-  const chartMax = Math.max(maxValue + chartSpan * .05, chartMin + 1);
-  const chartPalette = themeMode === "dark"
-    ? {
-        primary: "#f5f5f7",
-        muted: "#77777d",
-        grid: "rgba(245, 245, 247, .11)",
-        fill: "rgba(245, 245, 247, .10)",
-        secondary: "#c7c7cc",
-        tertiary: "#929298",
-        quaternary: "#626268"
-      }
-    : {
-        primary: "#111112",
-        muted: "#b9b9bf",
-        grid: "rgba(25, 25, 29, .08)",
-        fill: "rgba(17, 17, 18, .07)",
-        secondary: "#55555b",
-        tertiary: "#85858b",
-        quaternary: "#b3b3b8"
-      };
-  const chartLabelColor = themeMode === "dark" ? "#a0a0a6" : "#77777d";
-  const liquidityTones = [chartPalette.primary, chartPalette.secondary, chartPalette.tertiary, chartPalette.quaternary];
-  const chartData = {
-    labels: entries.map((entry) => formatMonthLabel(entry.id)),
+  const chartLabel = themeMode === "dark" ? "#AAA9A2" : "#75736D";
+  const chartGrid = themeMode === "dark" ? "rgba(245,244,239,.10)" : "rgba(22,22,20,.09)";
+  const netWorthPoints = entries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: getSnapshotTotals(entry).netWorth }));
+  const netWorthAxis = getNiceAxisBounds(netWorthPoints.map((point) => point.y));
+  const firstTimestamp = netWorthPoints[0]?.x;
+  const lastTimestamp = netWorthPoints[netWorthPoints.length - 1]?.x;
+
+  const netWorthData: ChartData<"line", { x: number; y: number }[]> = {
     datasets: [{
       label: "Net worth",
-      data: netWorthValues,
-      borderColor: chartPalette.primary,
-      backgroundColor: chartPalette.fill,
-      borderWidth: 2,
-      pointRadius: entries.length === 1 ? 3 : 0,
+      data: netWorthPoints,
+      borderColor: netWorthColor,
+      backgroundColor: marketFill,
+      borderWidth: 2.5,
+      pointRadius: entries.length < 2 ? 3 : 0,
       pointHoverRadius: 4,
-      pointBackgroundColor: chartPalette.primary,
+      pointBackgroundColor: netWorthColor,
       pointBorderWidth: 0,
-      tension: .22,
-      fill: true
+      tension: 0.2,
+      fill: false
     }]
   };
-  const chartOptions: ChartOptions<"line"> = {
+  const netWorthOptions: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
     plugins: {
       legend: { display: false },
       tooltip: {
+        backgroundColor: themeMode === "dark" ? "#252622" : "#FFFFFF",
+        borderColor: themeMode === "dark" ? "#41413A" : "#DAD6CD",
+        borderWidth: 1,
+        cornerRadius: 12,
+        displayColors: false,
+        padding: 12,
+        titleFont: { size: 10, weight: 600 },
+        bodyFont: { size: 13, weight: 700 },
+        titleColor: themeMode === "dark" ? "#AAA69C" : "#6B6860",
+        bodyColor: themeMode === "dark" ? "#F4F2ED" : "#111111",
         callbacks: {
-          label(context) {
-            const value = typeof context.raw === "number" ? context.raw : Number(context.raw);
-            return `Net worth: ${formatCurrency(value, masked)}`;
-          }
+          title(items) {
+            const timestamp = Number(items[0]?.parsed.x ?? 0);
+            const entry = entries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
+            return entry ? fullDate(entry.date) : "Snapshot";
+          },
+          label(context) { return `Net worth: ${formatCurrency(Number(context.parsed.y), masked)}`; }
         }
       }
     },
     scales: {
       x: {
+        type: "linear",
+        ...(firstTimestamp !== undefined && lastTimestamp !== undefined ? { min: firstTimestamp, max: lastTimestamp === firstTimestamp ? firstTimestamp + 86_400_000 : lastTimestamp } : {}),
         grid: { display: false },
         border: { display: false },
-        ticks: { maxTicksLimit: 5, maxRotation: 0, color: chartLabelColor, font: { size: 11 } }
+        ticks: {
+          maxTicksLimit: 6,
+          maxRotation: 0,
+          color: chartLabel,
+          callback(value) { return formatChartMonth(Number(value)); }
+        }
       },
       y: {
         position: "right",
-        min: netWorthValues.length > 1 ? chartMin : undefined,
-        max: netWorthValues.length > 1 ? chartMax : undefined,
-      grid: { color: chartPalette.grid, drawTicks: false },
+        min: netWorthAxis.min,
+        max: netWorthAxis.max,
+        grid: { color: chartGrid, drawTicks: false },
         border: { display: false },
-        ticks: {
-          maxTicksLimit: 3,
-          color: chartLabelColor,
-          font: { size: 10 },
-          callback(value) {
-            return masked ? "" : formatCompactCurrency(Number(value), false);
-          }
-        }
+        ticks: { maxTicksLimit: 4, stepSize: netWorthAxis.step, color: chartLabel, callback(value) { return masked ? "" : formatCompactCurrency(Number(value), false); } }
       }
     }
   };
 
-  const absoluteMovement = Math.abs(capitalChange) + Math.abs(marketChange);
-  const capitalShare = absoluteMovement > 0 ? (Math.abs(capitalChange) / absoluteMovement) * 100 : 0;
-  const marketShare = absoluteMovement > 0 ? (Math.abs(marketChange) / absoluteMovement) * 100 : 0;
   const xirrStart = returns?.marketPortfolio.startDate;
   const xirrEnd = returns?.marketPortfolio.endDate;
   const shortHistory = xirrStart && xirrEnd
-    ? new Date(`${xirrEnd}T00:00:00`).getTime() - new Date(`${xirrStart}T00:00:00`).getTime() < 365 * 24 * 60 * 60 * 1000
+    ? Date.parse(`${xirrEnd}T00:00:00`) - Date.parse(`${xirrStart}T00:00:00`) < 365 * 86_400_000
     : false;
+  const overallReturn = returns?.lifePortfolio.value ?? null;
+  const rateCaveat = shortHistory || (overallReturn !== null && Math.abs(overallReturn) > 1);
+  const rangeLabel = RANGE_OPTIONS.find((option) => option.key === selectedRange)?.label ?? "All";
 
   return (
-    <div className="analytics-page analytics-page-v2 page-enter">
-      <header className="analytics-header">
-        <h1>Analytics</h1>
-        <button type="button" className="analytics-add-button" onClick={onAddSnapshot}>Add snapshot <span aria-hidden="true">＋</span></button>
+    <div className="analytics-page page-enter">
+      <header className="analytics-page-heading">
+        <div><p className="section-eyebrow">{anchor ? `Since ${fullDate(anchor.date)}` : "Your full history"}</p><h1>Analytics</h1></div>
+        <div className="range-control" role="group" aria-label="Analytics date range">
+          {RANGE_OPTIONS.map((option) => <button key={option.key} type="button" className={`range-option${selectedRange === option.key ? " is-selected" : ""}`} aria-pressed={selectedRange === option.key} onClick={() => onRangeChange(option.key)}>{option.label}</button>)}
+        </div>
       </header>
 
-      <section className="analytics-hero dashboard-card" aria-labelledby="analytics-net-worth-title">
-        <div className="analytics-hero-summary">
-          <div>
-            <p id="analytics-net-worth-title" className="analytics-card-eyebrow">Net worth</p>
-            <strong>{latest ? formatCurrency(total, masked) : "—"}</strong>
-            {change !== null && first && latest && first.id !== latest.id ? (
-              <p className={`analytics-change${change < 0 ? " is-negative" : ""}`}>
-                <b>{masked ? "••%" : `${change > 0 ? "↑ " : change < 0 ? "↓ −" : ""}${formatCurrency(Math.abs(change), false)} (${firstNetWorth > 0 ? `${((change / firstNetWorth) * 100).toFixed(1)}%` : "—"})`}</b>
-                <span> since {firstLabel}</span>
-              </p>
-            ) : (
-              <p className="analytics-change analytics-change--quiet">{latest ? "One saved snapshot" : "Add a snapshot to start tracking your wealth."}</p>
-            )}
-          </div>
+      <section className="analytics-hero" aria-labelledby="analytics-net-worth-title">
+        <div className="analytics-hero-copy">
+          <p className="micro-label" id="analytics-net-worth-title">Net worth · {latest ? fullDate(latest.date) : "No snapshot yet"}</p>
+          <strong className="analytics-net-worth-value">{latestTotals ? <CompactCurrency value={latestTotals.netWorth} masked={masked} /> : "—"}</strong>
+          {change !== null && anchor && latest && anchor.id !== latest.id ? (
+            <p className={`analytics-change${change < 0 ? " is-negative" : ""}`}><strong>{formatSigned(change, masked)}{masked ? "" : ` (${changePercent === null ? "—" : formatSignedPercent(changePercent, false)})`}</strong><span> since {fullDate(anchor.date)}</span></p>
+          ) : <p className="analytics-change is-quiet">{latest ? "One recorded snapshot in this period" : "Add a snapshot to start tracking your wealth."}</p>}
+          {anchor && latest ? <div className="analytics-period-stats"><div><span>Start</span><strong>{fullDate(anchor.date)}</strong></div><div><span>End</span><strong>{fullDate(latest.date)}</strong></div><div><span>Change</span><strong>{formatSigned(change, masked)}</strong></div></div> : null}
         </div>
-
-        <div className="analytics-net-worth-chart" aria-label="Net worth over time">
-          {entries.length > 0 ? <Line data={chartData} options={chartOptions} /> : <p className="analytics-empty-hint">No snapshots in this period.</p>}
+        <div className="analytics-period-chart" aria-label="Net worth over the selected period">
+          {entries.length > 0 ? <Chart type="line" data={netWorthData} options={netWorthOptions} /> : <p className="chart-empty">No snapshots in this period.</p>}
         </div>
-
+        {anchor && latest ? <p className="analytics-period-footnote">Comparison uses {fullDate(anchor.date)} as the starting snapshot and {fullDate(latest.date)} as the latest.</p> : null}
       </section>
 
-      <div className="analytics-support-grid">
-        <section className="analytics-support-card dashboard-card" aria-labelledby="analytics-movement-title">
-          <div className="analytics-section-heading">
-            <h2 id="analytics-movement-title">Capital vs. market movement</h2>
-            <p>{first && latest && first.id !== latest.id ? `From ${firstLabel} to ${latestLabel}` : "Change across the selected period"}</p>
-          </div>
-          {first && latest && first.id !== latest.id ? (
-            <>
-              <div className="analytics-movement-bar" role="img" aria-label={`Capital base change ${signedCurrency(capitalChange, masked)}; market movement ${signedCurrency(marketChange, masked)}`}>
-                {capitalShare > 0 && <span className={`is-capital${capitalChange < 0 ? " is-negative" : ""}`} style={{ width: `${capitalShare}%` }} />}
-                {marketShare > 0 && <span className={`is-market${marketChange < 0 ? " is-negative" : ""}`} style={{ width: `${marketShare}%` }} />}
-              </div>
-              <div className="analytics-breakdown-list">
-                <div><span><i className="analytics-dot is-capital" />Capital base change</span><b className={capitalChange < 0 ? "is-negative" : ""}>{signedCurrency(capitalChange, masked)}</b></div>
-                <div><span><i className="analytics-dot is-market" />Market movement</span><b className={marketChange < 0 ? "is-negative" : ""}>{signedCurrency(marketChange, masked)}</b></div>
-                <div className="analytics-total-row"><span>Total change</span><b className={change! < 0 ? "is-negative" : ""}>{signedCurrency(change!, masked)}</b></div>
-              </div>
-              <p className="analytics-footnote">Capital base combines balances, deposits, wallet funds and invested principal.</p>
-            </>
-          ) : (
-            <p className="analytics-empty-hint">Save another snapshot to see the change split between capital and markets.</p>
-          )}
-        </section>
+      {anchor && latest && anchor.id !== latest.id ? <aside className="analytics-attribution"><span className="section-eyebrow">{rangeLabel === "All" ? "All time" : `Past ${rangeLabel}`}</span><p>Hard capital changed <strong>{formatSigned(hardCapitalChange, masked)}</strong>; unrealized gain changed <strong>{formatSigned(unrealizedChange, masked)}</strong>.</p></aside> : null}
 
-        <section className="analytics-support-card dashboard-card" aria-labelledby="analytics-liquidity-title">
-          <div className="analytics-section-heading">
-            <h2 id="analytics-liquidity-title">Cash and reserves</h2>
-            <p>Balances, wallet funds and fixed deposits</p>
-          </div>
-          <strong className="analytics-liquidity-total">{latest ? formatCurrency(availableLiquidity, masked) : "—"}</strong>
+      <section className="analytics-two-column">
+        <article className="ruled-panel" aria-labelledby="movement-heading">
+          <div className="section-heading"><div><h2 id="movement-heading">What moved your net worth <InfoTooltip text="Capital change is the change in cash, deposits, wallet balances, and invested principal. Market movement is the change in unrealized gain, not transaction-level total return." /></h2><p>{anchor && latest ? `${fullDate(anchor.date)} to ${fullDate(latest.date)}` : "Change across the selected period"}</p></div></div>
+          {anchor && latest && anchor.id !== latest.id ? (
+            <>
+              <div className="movement-track" aria-label={`Recorded hard capital changed ${formatSigned(hardCapitalChange, masked)}; unrealized gain changed ${formatSigned(unrealizedChange, masked)}`}>
+                {capitalShare > 0 ? <span className="movement-segment is-capital" style={{ width: `${capitalShare}%` }} /> : null}
+                {marketShare > 0 ? <span className="movement-segment is-market" style={{ width: `${marketShare}%` }} /> : null}
+              </div>
+              <div className="movement-rows">
+                <MovementRow label="Capital change" value={hardCapitalChange} masked={masked} tone="capital" />
+                <MovementRow label="Market movement" value={unrealizedChange} masked={masked} tone="market" />
+                <div className="movement-total"><span>Total net-worth change</span><strong className={change! < 0 ? "is-negative" : ""}>{formatSigned(change!, masked)}</strong></div>
+              </div>
+          <p className="panel-footnote">Changes reconcile to the total net-worth change for these snapshots.</p>
+            </>
+          ) : <p className="panel-empty">Save another snapshot to see what changed.</p>}
+        </article>
+
+        <article className="ruled-panel" aria-labelledby="liquidity-heading">
+          <div className="section-heading"><div><h2 id="liquidity-heading">Total liquidity <InfoTooltip text="Total liquidity = cash buffer (bank + Sodexo) + fixed deposits + stocks wallet balances." /></h2><p>Cash buffer + fixed deposits + stocks wallet</p></div></div>
+          <strong className="liquidity-total">{latest ? <CompactCurrency value={availableLiquidity} masked={masked} /> : "—"}</strong>
           {latest ? (
             <>
-              <div className="analytics-liquidity-bar" role="img" aria-label={`Available balances total ${formatCurrency(availableLiquidity, masked)}`}>
-                {liquidity.map((item, index) => item.value > 0 ? (
-                  <span key={item.label} style={{ width: `${availableLiquidity ? item.value / availableLiquidity * 100 : 0}%`, backgroundColor: liquidityTones[index] }} />
-                ) : null)}
+              <div className="liquidity-stack" role="img" aria-label={liquidity.map((item) => `${item.label}: ${formatCurrency(item.value, masked)}`).join(", ")}>
+                {liquidity.filter((item) => item.value > 0).map((item) => <span key={item.label} style={{ width: `${availableLiquidity ? item.value / availableLiquidity * 100 : 0}%`, backgroundColor: item.color }} />)}
               </div>
-              <div className="analytics-breakdown-list analytics-liquidity-list">
-                {liquidity.map((item, index) => (
-                  <div key={item.label}>
-                    <span><i className="analytics-dot" style={{ backgroundColor: liquidityTones[index] }} />{item.label}</span>
-                    <b>{formatCurrency(item.value, masked)}</b>
-                  </div>
-                ))}
-              </div>
+              <div className="liquidity-list">{liquidity.map((item) => <div key={item.label}><span><i className={item.value === 0 ? "is-zero" : ""} style={{ backgroundColor: item.value === 0 ? "transparent" : item.color, borderColor: item.color }} />{item.label}</span><strong>{formatCurrency(item.value, masked)}</strong></div>)}</div>
             </>
-          ) : <p className="analytics-empty-hint">Add a snapshot to see your available balances.</p>}
-        </section>
-      </div>
+          ) : <p className="panel-empty">Add a snapshot to see available liquidity.</p>}
+        </article>
+      </section>
 
-      <section className="analytics-returns dashboard-card" aria-labelledby="analytics-returns-title">
-        <div className="analytics-returns-header">
-          <div>
-            <h2 id="analytics-returns-title">Investment performance</h2>
-            <p>Annualized returns, weighted for when money moved in or out.</p>
-          </div>
-          <div className="analytics-market-return">
-            <span>Portfolio XIRR</span>
-            <strong className={returns?.marketPortfolio.value !== null && (returns?.marketPortfolio.value ?? 0) < 0 ? "is-negative" : ""}>
-              {returnsLoading ? "…" : returns?.marketPortfolio.value === null || !returns ? "—" : masked ? "••%" : `${(returns.marketPortfolio.value * 100).toFixed(2)}%`}
-            </strong>
-            <small>a year</small>
-          </div>
+      <section className="ruled-panel performance-panel" aria-labelledby="returns-heading">
+          <div className="performance-heading">
+          <div className="section-heading"><div><h2 id="returns-heading">Investment performance</h2><p>Annualized return, weighted by when contributions were recorded.</p></div></div>
+          <div className="portfolio-xirr"><span>Market return <InfoTooltip text="Annualized, money-weighted XIRR for the selected period." /></span><strong className={returns?.marketPortfolio.value !== null && (returns?.marketPortfolio.value ?? 0) < 0 ? "is-negative" : ""}>{returnsLoading ? "…" : formatReturn(returns?.marketPortfolio.value ?? null, masked)}</strong><small>a year</small></div>
         </div>
-
-        {returnsLoading ? (
-          <p className="analytics-empty-hint analytics-returns-loading">Calculating returns…</p>
-        ) : returns ? (
-          <div className="analytics-return-rows">
+        {returnsLoading ? <p className="panel-empty">Calculating returns…</p> : returns ? (
+          <div className="return-rows">
             {ASSET_KEYS.map((asset) => {
               const result = returns.perAsset.perAsset[asset];
               if (!result) return null;
-              const annualized = result.value;
-              const totalReturn = result.invested > 0 ? (result.current - result.invested) / result.invested : null;
-              const displayedReturn = annualized ?? totalReturn;
-              const scale = Math.max(25, Math.ceil(Math.max(...ASSET_KEYS.map((key) => Math.abs((returns.perAsset.perAsset[key]?.value ?? 0) * 100))) / 5) * 5);
-              const width = displayedReturn === null ? 0 : Math.min(Math.abs(displayedReturn * 100) / scale * 50, 50);
-              const isNegative = displayedReturn !== null && displayedReturn < 0;
-              const startValue = formatCompactCurrency(result.invested, masked);
-              const endValue = formatCompactCurrency(result.current, masked);
-              return (
-                <div className="analytics-return-row" key={asset}>
-                  <div className="analytics-return-asset">
-                    <strong>{ASSET_LABELS[asset]}</strong>
-                    <span>{startValue} → {endValue}</span>
-                  </div>
-                  <div className="analytics-return-track" aria-hidden="true">
-                    <i />
-                    {displayedReturn !== null && <span className={`${isNegative ? "is-negative" : ""}`} style={{ left: isNegative ? `${50 - width}%` : "50%", width: `${width}%` }} />}
-                  </div>
-                  <div className={`analytics-return-value${isNegative ? " is-negative" : ""}`}>
-                    <strong>{displayedReturn === null ? "—" : masked ? "••%" : `${displayedReturn > 0 ? "+" : displayedReturn < 0 ? "−" : ""}${Math.abs(displayedReturn * 100).toFixed(2)}%`}</strong>
-                    <span>{annualized !== null ? "a year" : totalReturn !== null ? "total so far" : result.message}</span>
-                  </div>
-                </div>
-              );
+              const value = result.value;
+              const totalSoFar = value === null && result.invested > 0 ? (result.current - result.invested) / result.invested : null;
+              const displayedValue = value;
+              const shownReturn = displayedValue ?? totalSoFar;
+              return <div className="return-row" key={asset}>
+                <div className="return-name"><span className="asset-color-dot" style={{ backgroundColor: assetColors[asset] }} /><strong>{ASSET_LABELS[asset]}</strong><small>{formatCompactCurrency(result.invested, masked)} → {formatCompactCurrency(result.current, masked)}</small></div>
+                <div className={`return-line${value === null ? " is-unannualized" : ""}`}><i />{value !== null ? <span style={{ width: `${Math.min(Math.abs(value * 100) / 30 * 50, 50)}%`, left: value < 0 ? `${50 - Math.min(Math.abs(value * 100) / 30 * 50, 50)}%` : "50%", backgroundColor: value < 0 ? "var(--negative)" : "var(--positive)" }} /> : null}</div>
+                <div className={`return-value${shownReturn !== null && shownReturn < 0 ? " is-negative" : ""}`}><strong>{formatReturn(shownReturn, masked)}</strong><small>{value !== null ? "per year" : totalSoFar !== null ? "total so far" : result.message}</small></div>
+              </div>;
             })}
           </div>
-        ) : (
-          <p className="analytics-empty-hint analytics-returns-loading">Returns are unavailable for this period.</p>
-        )}
-
-        <div className="analytics-returns-footer">
-          <div><span>Overall return</span><strong>{returns?.lifePortfolio.value === null || !returns ? "—" : masked ? "••%" : `${returns.lifePortfolio.value < 0 ? "−" : ""}${Math.abs(returns.lifePortfolio.value * 100).toFixed(2)}%`}</strong><small>a year</small></div>
-          {shortHistory && <p className="analytics-return-warning"><span aria-hidden="true">⚠</span> Short histories can inflate annualized rates. Treat these as a guide.</p>}
-        </div>
-        <p className="analytics-footnote">Returns use XIRR when cash-flow history allows. Otherwise, the asset row shows total return to date.</p>
+        ) : <p className="panel-empty">Returns are unavailable for this period.</p>}
+        <div className="performance-footer"><span>Overall return <strong className={rateCaveat ? "is-caveated" : ""}>{formatReturn(overallReturn, masked)}</strong> a year</span>{rateCaveat ? <p className="return-caveat">Short histories or rates above 100% can exaggerate yearly returns. Treat this as a rough guide.</p> : null}</div>
       </section>
 
-      <section className="analytics-heatmap dashboard-card" aria-labelledby="analytics-heatmap-title">
-        <div className="analytics-heatmap-header">
-          <div>
-            <h2 id="analytics-heatmap-title">Asset gain / loss by snapshot</h2>
-            <p>Unrealized return at each saved date, compared with invested principal.</p>
-          </div>
-        </div>
-        {entries.length > 0 ? (
-          <div className="analytics-heatmap-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th scope="col">Snapshot</th>
-                  {ASSET_KEYS.map((asset) => <th scope="col" key={asset}>{ASSET_LABELS[asset]}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {heatmapEntries.map((entry) => (
-                  <tr key={entry.id}>
-                    <th scope="row">{new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "2-digit" }).format(new Date(`${entry.date}T00:00:00`))}</th>
-                    {ASSET_KEYS.map((asset) => {
-                      const holding = entry.market_assets[asset];
-                      const value = holding.invested > 0 ? ((holding.current - holding.invested) / holding.invested) * 100 : null;
-                      const magnitude = value === null ? 0 : Math.min(Math.abs(value) / 30, 1);
-                      const alpha = .06 + magnitude * .2;
-                      const background = value === null
-                        ? "transparent"
-                        : value >= 0
-                          ? `color-mix(in srgb, var(--chart-success) ${Math.round(alpha * 100)}%, var(--card))`
-                          : `color-mix(in srgb, var(--chart-danger) ${Math.round(alpha * 100)}%, var(--card))`;
-                      return (
-                        <td key={asset}>
-                          <span
-                            role="img"
-                            className={`analytics-heatmap-value${value === null ? " is-empty" : value < 0 ? " is-negative" : ""}`}
-                            style={{ backgroundColor: background }}
-                            aria-label={masked ? `${ASSET_LABELS[asset]} return hidden` : `${ASSET_LABELS[asset]} ${value === null ? "unavailable" : `${value >= 0 ? "plus " : "minus "}${Math.abs(value).toFixed(1)} percent`}`}
-                          >
-                            {masked ? "••%" : value === null ? "—" : `${value > 0 ? "+" : value < 0 ? "−" : ""}${value.toFixed(1)}%`}
-                          </span>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="analytics-empty-hint">No snapshots in this period.</p>
-        )}
+      <section className="ruled-panel asset-trends-panel" aria-labelledby="asset-trends-heading">
+        <div className="section-heading"><div><h2 id="asset-trends-heading">Unrealized gain / loss by asset</h2><p>Current value minus invested principal at each snapshot.</p></div></div>
+        {entries.length > 0 ? <div className="asset-trend-grid">{ASSET_KEYS.map((asset) => <AssetTrend key={asset} asset={asset} entries={entries} masked={masked} tone={assetColors[asset]} chartLabel={chartLabel} chartGrid={chartGrid} />)}</div> : <p className="panel-empty">No snapshots in this period.</p>}
+        {entries.length > 0 ? <details className="trend-data-details"><summary><span>View exact values</span><i aria-hidden="true" /></summary><div className="trend-table-scroll"><table className="trend-table"><thead><tr><th>Snapshot</th>{ASSET_KEYS.map((asset) => <th key={asset}>{ASSET_LABELS[asset]}</th>)}</tr></thead><tbody>{[...entries].reverse().map((entry) => <tr key={entry.id}><th>{fullDate(entry.date)}</th>{ASSET_KEYS.map((asset) => <td key={asset}>{formatSigned(entry.market_assets[asset].current - entry.market_assets[asset].invested, masked)}</td>)}</tr>)}</tbody></table></div></details> : null}
       </section>
     </div>
   );
+}
+
+function MovementRow({ label, value, masked, tone }: { label: string; value: number; masked: boolean; tone: "capital" | "market" }) {
+  return <div className="movement-row"><span><i className={`movement-dot is-${tone}`} />{label}</span><strong className={value < 0 ? "is-negative" : "is-positive"}>{formatSigned(value, masked)}</strong></div>;
+}
+
+function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { asset: string; entries: Entry[]; masked: boolean; tone: string; chartLabel: string; chartGrid: string }) {
+  const points = entries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: entry.market_assets[asset].current - entry.market_assets[asset].invested }));
+  const latest = points[points.length - 1]?.y ?? 0;
+  const values = points.map((point) => point.y);
+  const axis = getNiceAxisBounds(values);
+  const zeroLine: Plugin<"line"> = {
+    id: `zero-line-${asset}`,
+    afterDraw(chart) {
+      const y = chart.scales.y.getPixelForValue(0);
+      if (y < chart.chartArea.top || y > chart.chartArea.bottom) return;
+      const context = chart.ctx;
+      context.save();
+      context.strokeStyle = chartLabel;
+      context.globalAlpha = 0.75;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(chart.chartArea.left, y);
+      context.lineTo(chart.chartArea.right, y);
+      context.stroke();
+      context.restore();
+    }
+  };
+  const strokeOutline: Plugin<"line"> = {
+    id: `asset-stroke-outline-${asset}`,
+    afterDatasetDraw(chart) {
+      if (points.length < 2) return;
+      const context = chart.ctx;
+      const xScale = chart.scales.x;
+      const yScale = chart.scales.y;
+      context.save();
+      context.beginPath();
+      context.rect(chart.chartArea.left, chart.chartArea.top, chart.chartArea.right - chart.chartArea.left, chart.chartArea.bottom - chart.chartArea.top);
+      context.clip();
+      context.strokeStyle = chartLabel === "#AAA9A2" ? "#F4F2ED" : "#111111";
+      context.lineWidth = 4.5;
+      context.lineCap = "round";
+      context.lineJoin = "round";
+      context.beginPath();
+      points.forEach((point, index) => {
+        const x = xScale.getPixelForValue(point.x);
+        const y = yScale.getPixelForValue(point.y);
+        if (index === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      });
+      context.stroke();
+      context.strokeStyle = tone;
+      context.lineWidth = 2;
+      context.stroke();
+      context.restore();
+    }
+  };
+  const data: ChartData<"line", { x: number; y: number }[]> = { datasets: [{ label: `${ASSET_LABELS[asset]} unrealized gain/loss`, data: points, borderColor: tone, backgroundColor: `${tone}20`, borderWidth: 2, pointRadius: points.length < 2 ? 2 : 0, pointHoverRadius: 3, tension: 0.16, fill: { target: "origin", above: `${tone}20`, below: "rgba(215,38,61,.10)" } }] };
+  const options: ChartOptions<"line"> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: chartLabel === "#AAA9A2" ? "#252622" : "#FFFFFF", borderColor: chartLabel === "#AAA9A2" ? "#41413A" : "#DAD6CD", borderWidth: 1, cornerRadius: 12, displayColors: false, padding: 12, titleFont: { size: 10, weight: 600 }, bodyFont: { size: 13, weight: 700 }, titleColor: chartLabel, bodyColor: chartLabel === "#AAA9A2" ? "#F4F2ED" : "#111111", callbacks: { title(items) { const entry = entries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === Number(items[0]?.parsed.x ?? 0)); return entry ? fullDate(entry.date) : "Snapshot"; }, label(context) { return `${ASSET_LABELS[asset]}: ${formatSigned(Number(context.parsed.y), masked)}`; } } } },
+    scales: {
+      x: { type: "linear", grid: { display: false }, border: { display: false }, ticks: { display: false } },
+      y: { position: "right", min: axis.min, max: axis.max, grid: { color: chartGrid }, border: { display: false }, ticks: { maxTicksLimit: 3, stepSize: axis.step, color: chartLabel, callback(value) { return masked ? "" : formatCompactCurrency(Number(value), false); } } }
+    }
+  };
+  return <article className="asset-trend-card"><div className="asset-trend-heading"><span className="asset-color-dot" style={{ backgroundColor: tone }} /><h3>{ASSET_LABELS[asset]}</h3><strong className={latest < 0 ? "is-negative" : "is-positive"}>{formatSigned(latest, masked)}</strong></div><div className="asset-trend-chart"><Chart type="line" data={data} options={options} plugins={[zeroLine, strokeOutline]} /></div></article>;
+}
+
+function formatReturn(value: number | null, masked: boolean) {
+  if (value === null || !Number.isFinite(value)) return "—";
+  return masked ? "••%" : `${value < 0 ? "−" : value > 0 ? "+" : ""}${Math.abs(value * 100).toFixed(2)}%`;
 }

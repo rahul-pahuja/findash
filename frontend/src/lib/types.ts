@@ -7,6 +7,23 @@ export type NullableNumber = number | null;
 export interface Dataset {
   entries: Entry[];
   meta: Meta;
+  preferences?: DatasetPreferences;
+}
+
+export interface DatasetPreferences {
+  version: 1;
+  shortTermGoal?: ShortTermGoal | null;
+  notifications?: {
+    dismissedGoalPromptAt?: string;
+    dismissedGapMonth?: string;
+  };
+}
+
+export interface ShortTermGoal {
+  targetAmount: number;
+  targetDate: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Meta {

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { Entry } from "../lib/types";
 import { ASSET_KEYS, ASSET_LABELS } from "../utils/config";
-import { formatCurrency } from "../utils/format";
+import { formatCurrency, formatDateLabel, formatSigned, formatSignedPercent } from "../utils/format";
 
 interface Props {
   open: boolean;
   entry: Entry | null;
+  initialDate?: string;
+  masked: boolean;
   entries: Entry[];
   onClose: () => void;
   onSave: (entry: Entry) => void;
@@ -40,14 +42,15 @@ const emptyEntry = (): Entry => ({
   expenses_note: ""
 });
 
-function draftFromLatest(entries: Entry[]) {
-  const today = localToday();
-  const latest = entries.filter((item) => item.date <= today).sort((a, b) => a.date.localeCompare(b.date)).at(-1);
-  if (!latest) return emptyEntry();
+function draftFromLatest(entries: Entry[], initialDate?: string) {
+  const targetDate = initialDate ?? localToday();
+  const eligible = entries.filter((item) => item.date <= targetDate).sort((a, b) => a.date.localeCompare(b.date));
+  const latest = eligible[eligible.length - 1];
+  if (!latest) return { ...emptyEntry(), date: targetDate, id: targetDate };
   return {
     ...(JSON.parse(JSON.stringify(latest)) as Entry),
     id: "",
-    date: localToday(),
+    date: targetDate,
     expenses_note: ""
   };
 }
@@ -57,17 +60,32 @@ function netWorthFor(entry: Entry) {
   return balances + ASSET_KEYS.reduce((sum, asset) => sum + entry.market_assets[asset].current, 0);
 }
 
-export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props) {
+function hardCapitalFor(entry: Entry) {
+  const balances = entry.liquid.bank + entry.liquid.sodexo + entry.hard_assets.stocks_wallet + entry.hard_assets.fd;
+  return balances + ASSET_KEYS.reduce((sum, asset) => sum + entry.market_assets[asset].invested, 0);
+}
+
+function dateLabel(date: string) {
+  return formatDateLabel(date);
+}
+
+export function DataEntryModal({ open, entry, initialDate, masked, entries, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<Entry>(emptyEntry());
   const [noteOpen, setNoteOpen] = useState(false);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
   const contentRef = useRef<HTMLElement>(null);
+  const initialDraftRef = useRef<string>("");
+  const dirtyRef = useRef(false);
+  const cancelRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    setDraft(entry ?? draftFromLatest(entries));
+    const nextDraft = entry ?? draftFromLatest(entries, initialDate);
+    setDraft(nextDraft);
+    initialDraftRef.current = JSON.stringify(nextDraft);
+    dirtyRef.current = false;
     setNoteOpen(Boolean(entry?.expenses_note));
     setEditingAmounts({});
-  }, [entry, open, entries]);
+  }, [entry, initialDate, open, entries]);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +97,7 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        onClose();
+        cancelRef.current();
         return;
       }
       if (event.key !== "Tab") return;
@@ -104,15 +122,11 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
       window.removeEventListener("keydown", handleKeyDown);
       if (previousFocus?.isConnected) previousFocus.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
+
+  dirtyRef.current = Boolean(initialDraftRef.current) && JSON.stringify(draft) !== initialDraftRef.current;
 
   if (!open) return null;
-
-  const handleBackdropClick = (event: React.MouseEvent) => {
-    if (contentRef.current && !contentRef.current.contains(event.target as Node)) {
-      onClose();
-    }
-  };
 
   const update = (path: string, value: string) => {
     const parsedValue = value === "" || value === "." || value === "-" ? null : Number(value.replace(/,/g, ""));
@@ -140,11 +154,11 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
   const amountInput = (label: string, id: string, value: number | null, path: string, className = "") => (
       <input
         id={id}
-        className={className}
+        className={[className, value === 0 ? "is-zero" : ""].filter(Boolean).join(" ")}
         type="text"
         aria-label={label}
         inputMode="decimal"
-        value={editingAmounts[id] ?? (value === null ? "" : formatCurrency(value, false))}
+        value={editingAmounts[id] ?? (value === null ? "" : masked ? "₹ ••••" : formatCurrency(value, false))}
         onFocus={() => setEditingAmounts((current) => ({ ...current, [id]: value === null ? "" : String(value) }))}
         onChange={(event) => {
           setEditingAmounts((current) => ({ ...current, [id]: event.target.value.replace(/[^\d.,-]/g, "") }));
@@ -170,48 +184,69 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
     .filter((candidate) => candidate.id !== entry?.id && candidate.date < draft.date)
     .sort((a, b) => b.date.localeCompare(a.date))[0];
   const snapshotChange = previousEntry ? netWorth - netWorthFor(previousEntry) : null;
-  const formattedDate = draft.date
-    ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${draft.date}T00:00:00`))
-    : "Select date";
+  const capitalChange = previousEntry ? hardCapitalFor(draft) - hardCapitalFor(previousEntry) : null;
+  const unrealizedChange = snapshotChange !== null && capitalChange !== null ? snapshotChange - capitalChange : null;
+  const formattedDate = draft.date ? dateLabel(draft.date) : "Select date";
   const isToday = draft.date === localToday();
   const hasCarryForward = entries.some((item) => item.date <= localToday());
+  const balanceSubtotal = balanceFields.reduce((total, field) => total + field.value, 0);
+  const marketSubtotal = ASSET_KEYS.reduce((total, asset) => total + draft.market_assets[asset].current, 0);
   const saveDraft = () => {
     onSave({ ...draft, id: draft.date });
     onClose();
   };
+  const cancelDraft = () => {
+    if (dirtyRef.current && !window.confirm("Discard your unsaved snapshot changes?")) return;
+    onClose();
+  };
+  cancelRef.current = cancelDraft;
+  const handleDialogKeyDown = (event: React.KeyboardEvent<HTMLElement>) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      saveDraft();
+      return;
+    }
+    if (event.key !== "Enter" || !(event.target instanceof HTMLInputElement) || event.target.type === "date") return;
+    event.preventDefault();
+    const fields = Array.from(contentRef.current?.querySelectorAll<HTMLInputElement>('input:not([type="date"]):not([disabled])') ?? []);
+    const index = fields.indexOf(event.target);
+    fields[index + 1]?.focus();
+  };
 
   return (
-    <div className="modal-backdrop" onMouseDown={handleBackdropClick}>
-      <section ref={contentRef} className="snapshot-dialog snapshot-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="snapshot-dialog-title" tabIndex={-1}>
+    <div className="modal-backdrop" onMouseDown={(event) => { if (contentRef.current && !contentRef.current.contains(event.target as Node)) cancelDraft(); }}>
+      <section ref={contentRef} className="snapshot-dialog snapshot-editor-dialog" role="dialog" aria-modal="true" aria-labelledby="snapshot-dialog-title" tabIndex={-1} onKeyDown={handleDialogKeyDown}>
         <header className="snapshot-sheet-header">
-          <button type="button" className="snapshot-sheet-action" onClick={onClose}>Cancel</button>
+          <button type="button" className="snapshot-sheet-action" onClick={cancelDraft}>Cancel</button>
           <h2 id="snapshot-dialog-title">{entry ? "Edit snapshot" : "New snapshot"}</h2>
-          <button type="button" className="snapshot-sheet-action snapshot-sheet-save" onClick={saveDraft}>Save</button>
+          <button type="button" className="snapshot-sheet-action snapshot-sheet-save" onClick={saveDraft}>{entry ? "Save changes" : "Save snapshot"}</button>
         </header>
 
         <div className="snapshot-dialog-body snapshot-editor-body">
           <section className="snapshot-net-worth" aria-label="Live snapshot summary">
-            <span className="snapshot-net-worth-label">Net worth</span>
-            <strong>{formatCurrency(netWorth, false)}</strong>
+            <span className="snapshot-net-worth-label">Net worth · live</span>
+            <strong>{formatCurrency(netWorth, masked)}</strong>
             {snapshotChange === null ? (
               <span className="snapshot-period-change snapshot-period-change--neutral">No earlier snapshot</span>
             ) : (
               <span className={`snapshot-period-change${snapshotChange < 0 ? " is-negative" : ""}`}>
-                {snapshotChange > 0 ? "+" : snapshotChange < 0 ? "−" : ""}{formatCurrency(Math.abs(snapshotChange), false)} since previous snapshot
+                {formatSigned(snapshotChange, masked)} since {previousEntry ? dateLabel(previousEntry.date) : "previous snapshot"}
               </span>
             )}
+            {capitalChange !== null && unrealizedChange !== null ? <span className="snapshot-movement-summary">Hard capital {formatSigned(capitalChange, masked)} · unrealized gain {formatSigned(unrealizedChange, masked)}</span> : null}
           </section>
 
           <div className="snapshot-date-panel">
             <label className="snapshot-date-control" htmlFor="snapshot-date">
-              <span>{isToday ? `Today, ${formattedDate}` : formattedDate}</span>
+              <span>{!entry && isToday ? `Today, ${formattedDate}` : formattedDate}</span>
               <input id="snapshot-date" type="date" value={draft.date} aria-label="Snapshot date" onChange={(event) => handleBase("date", event.target.value)} />
             </label>
           </div>
 
           <section className="snapshot-editor-section" aria-labelledby="snapshot-balances-heading">
             <div className="snapshot-editor-section-heading">
-              <h3 id="snapshot-balances-heading">Cash and deposits</h3>
+              <h3 id="snapshot-balances-heading">Cash, deposits and wallet</h3>
+              <strong>{formatCurrency(balanceSubtotal, masked)}</strong>
             </div>
             <div className="snapshot-balance-list snapshot-form-surface">
               {balanceFields.map((field) => (
@@ -226,6 +261,7 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
           <section className="snapshot-editor-section snapshot-investments-section" aria-labelledby="market-assets-heading">
             <div className="snapshot-editor-section-heading">
               <h3 id="market-assets-heading">Market investments</h3>
+              <strong>{formatCurrency(marketSubtotal, masked)}</strong>
             </div>
             <div className="snapshot-investment-list snapshot-form-surface">
               {ASSET_KEYS.map((asset) => {
@@ -233,11 +269,11 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
                 const current = draft.market_assets[asset].current ?? 0;
                 const gain = current - invested;
                 const hasValues = invested !== 0 || current !== 0;
-                const percent = invested > 0 ? ` (${((gain / invested) * 100).toFixed(1)}%)` : "";
+                const percent = invested > 0 ? ` (${formatSignedPercent(gain / invested, false)})` : "";
                 return (
                   <article className="snapshot-investment-row" key={asset}>
                     <div className="snapshot-investment-main">
-                      <h4>{ASSET_LABELS[asset]}</h4>
+                      <h4><i className={`snapshot-asset-dot is-${asset}`} />{ASSET_LABELS[asset]}</h4>
                       {amountInput(`${ASSET_LABELS[asset]} current value`, `snapshot-${asset}-current`, draft.market_assets[asset].current, `market_assets.${asset}.current`, "snapshot-current-value")}
                     </div>
                     <div className="snapshot-investment-meta">
@@ -246,7 +282,7 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
                         {amountInput(`${ASSET_LABELS[asset]} invested`, `snapshot-${asset}-invested`, draft.market_assets[asset].invested, `market_assets.${asset}.invested`)}
                       </label>
                       <p className={`snapshot-investment-performance${gain < 0 ? " is-negative" : ""}${hasValues ? "" : " is-neutral"}`}>
-                        {hasValues ? <>{gain > 0 ? "+" : gain < 0 ? "−" : ""}{formatCurrency(Math.abs(gain), false)}{percent}</> : "—"}
+                        {hasValues ? masked ? "₹ ••••" : <>{formatSigned(gain, false)}{percent}</> : "—"}
                       </p>
                     </div>
                   </article>
@@ -270,6 +306,7 @@ export function DataEntryModal({ open, entry, entries, onClose, onSave }: Props)
               <div id="snapshot-note-content" className="snapshot-note-content field entry-field">
                 <label htmlFor="snapshot-note" className="sr-only">Snapshot note</label>
                 <textarea id="snapshot-note" value={draft.expenses_note} onChange={(event) => handleBase("expenses_note", event.target.value)} rows={2} placeholder="Add context for a major expense or portfolio change" />
+                <span className="snapshot-note-helper">Shows as a marker on your charts.</span>
               </div>
             )}
           </section>

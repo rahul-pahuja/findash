@@ -6,16 +6,19 @@ import { formatMonthLabel } from "../utils/format";
 interface Props {
   open: boolean;
   entry: Entry | null;
+  masked: boolean;
   onClose: () => void;
   onSave: (entry: Entry) => void;
 }
 
-export function IncomeSipModal({ open, entry, onClose, onSave }: Props) {
+export function IncomeSipModal({ open, entry, masked, onClose, onSave }: Props) {
   const [draft, setDraft] = useState<Entry | null>(entry);
+  const [focusedAmount, setFocusedAmount] = useState<string | null>(null);
   const contentRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setDraft(entry ? JSON.parse(JSON.stringify(entry)) as Entry : null);
+    setFocusedAmount(null);
   }, [entry, open]);
 
   useEffect(() => {
@@ -64,7 +67,8 @@ export function IncomeSipModal({ open, entry, onClose, onSave }: Props) {
   };
 
   const updateNumber = (path: string, value: string) => {
-    const numberValue = value === "" ? null : Number(value);
+    const numberValue = value === "" || value === "." ? null : Number(value);
+    const safeValue = numberValue !== null && !Number.isFinite(numberValue) ? null : numberValue;
     setDraft((current) => {
       if (!current) return current;
       const next = JSON.parse(JSON.stringify(current)) as Entry;
@@ -73,7 +77,7 @@ export function IncomeSipModal({ open, entry, onClose, onSave }: Props) {
       while (chunks.length > 1) {
         target = target[chunks.shift()!] as Record<string, unknown>;
       }
-      target[chunks[0]] = numberValue;
+      target[chunks[0]] = safeValue;
       return next;
     });
   };
@@ -103,12 +107,12 @@ export function IncomeSipModal({ open, entry, onClose, onSave }: Props) {
               <label htmlFor="income-in-hand">Amount <span>INR</span></label>
               <input
                 id="income-in-hand"
-                type="number"
+                type="text"
                 inputMode="decimal"
-                min="0"
-                step="any"
-                value={draft.income.in_hand ?? ""}
-                onChange={(event) => updateNumber("income.in_hand", event.target.value)}
+                value={masked && focusedAmount !== "income" && draft.income.in_hand !== null ? "••••" : draft.income.in_hand ?? ""}
+                onFocus={() => setFocusedAmount("income")}
+                onBlur={() => setFocusedAmount(null)}
+                onChange={(event) => updateNumber("income.in_hand", event.target.value.replace(/[^\d.]/g, ""))}
                 placeholder="0"
               />
             </div>
@@ -130,12 +134,12 @@ export function IncomeSipModal({ open, entry, onClose, onSave }: Props) {
                     <label htmlFor={`sip-${asset}`}>Amount <span>INR</span></label>
                     <input
                       id={`sip-${asset}`}
-                      type="number"
+                      type="text"
                       inputMode="decimal"
-                      min="0"
-                      step="any"
-                      value={draft.sip?.[asset] ?? ""}
-                      onChange={(event) => updateNumber(`sip.${asset}`, event.target.value)}
+                      value={masked && focusedAmount !== asset && draft.sip?.[asset] !== null && draft.sip?.[asset] !== undefined ? "••••" : draft.sip?.[asset] ?? ""}
+                      onFocus={() => setFocusedAmount(asset)}
+                      onBlur={() => setFocusedAmount(null)}
+                      onChange={(event) => updateNumber(`sip.${asset}`, event.target.value.replace(/[^\d.]/g, ""))}
                       placeholder="0"
                     />
                   </div>

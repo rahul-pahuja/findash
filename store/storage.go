@@ -18,8 +18,9 @@ var (
 )
 
 type Dataset struct {
-	Entries []Entry `json:"entries"`
-	Meta    Meta    `json:"meta"`
+	Entries     []Entry         `json:"entries"`
+	Meta        Meta            `json:"meta"`
+	Preferences json.RawMessage `json:"preferences,omitempty"`
 }
 
 type Meta struct {
