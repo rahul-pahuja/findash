@@ -57,6 +57,11 @@ pnpm-debug.log*
 /*.backup.json
 /*.bak
 
+# Root-level notes and standalone mockups
+/*.md
+!/README.md
+/*.html
+
 # Local databases
 *.db
 *.sqlite

@@ -22,7 +22,7 @@ It runs as a single Go binary that serves an embedded React frontend, stores dat
 - Backend: Go + `net/http`
 - Storage: local `data.json`
 - Packaging: React bundle embedded into the Go binary
-- macOS daemon management: `launchctl` via `./findash`
+- Build and run workflows: `Makefile`
 
 ## Project Layout
 
@@ -32,13 +32,13 @@ financial-dashboard/
 ├── calc/                # Metrics and XIRR engine
 ├── store/               # Data model, validation, atomic persistence
 ├── frontend/            # React app source and production build
-├── data.json            # Local sample / persisted dataset
-├── findash              # macOS daemon wrapper
-├── findash-app          # Built Go binary
 ├── Makefile             # Common workflow commands
 ├── main.go              # App entrypoint and asset embed
 └── README.md
 ```
+
+The app creates `data.json` with sample data on first run. Build outputs, local
+data, and machine-specific files are not part of the source tree.
 
 ## Quick Start
 
@@ -78,13 +78,13 @@ make rebuild         # Clean and rebuild everything
 make test            # Run Go tests
 make run             # Build and run in foreground
 make run-backend     # Run existing binary in foreground
-make start           # Start launchctl-managed daemon
-make stop            # Stop daemon
-make status          # Show daemon status
-make logs            # Tail daemon logs
 make clean           # Remove build artifacts
 make clean-cache     # Remove Go cache
 ```
+
+The Makefile also defines `start`, `stop`, `status`, and `logs` targets for a
+macOS `launchctl` wrapper. The `./findash` wrapper is not included in this
+checkout, so those daemon targets need that script before they can be used.
 
 ## Data Model
 
@@ -161,23 +161,6 @@ XIRR can be computed from the current in-browser dataset without requiring a fil
 - the default currency is `INR`
 - the default local port is `8080`
 
-## macOS Daemon Workflow
-
-To run FinDash in the background through `launchctl`:
-
-```bash
-make start
-make status
-make logs
-make stop
-```
-
-The wrapper script writes logs into:
-
-```text
-.findash/
-```
-
 ## Testing
 
 Run the backend test suite with:
@@ -203,6 +186,5 @@ This repo includes:
 - sample dataset
 - working local dashboard UI
 - `Makefile`
-- daemon wrapper for macOS
 
-Open the app at `http://localhost:8080` after `make run` or `make start`.
+Open the app at `http://localhost:8080` after `make run`.
