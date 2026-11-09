@@ -4,7 +4,7 @@ APP_NAME := findash-app
 FRONTEND_DIR := frontend
 GO_CACHE := $(CURDIR)/.gocache
 PORT ?= 8080
-DATA_FILE ?= $(CURDIR)/data.json
+DATA_FILE ?= $(HOME)/findash/data.json
 
 .PHONY: help install install-frontend frontend-build frontend-dev backend-build build rebuild test check-port run run-backend start stop status logs clean clean-build clean-cache
 

@@ -88,7 +88,7 @@ checkout, so those daemon targets need that script before they can be used.
 
 ## Data Model
 
-The canonical dataset lives in `data.json`.
+The canonical dataset lives in `data.json`, stored outside this repository at `$(HOME)/findash/data.json` by default. Override the location with `make run DATA_FILE=/path/to/data.json` or the `FINDASH_DATA` environment variable. The file is git-ignored and never committed.
 
 ```json
 {
