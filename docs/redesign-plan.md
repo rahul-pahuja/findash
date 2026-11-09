@@ -120,6 +120,7 @@ The working `data.json` has been migrated to schema v2. It retains all 49 snapsh
 ### 5. Plan and Settings
 
 - [x] Add multiple goals with amount, optional user target date, and distinct calculated scenario dates.
+- [x] Render goals as an Apple-style horizontal scroll-snap card rail with the add-goal action in the section header.
 - [x] Add dated income/expense history and assumption inputs in Settings.
 - [x] Derive savings rate and emergency runway only when the corresponding input exists; otherwise explain what to enter.
 - [x] Include JSON save, reload, import, and export actions.

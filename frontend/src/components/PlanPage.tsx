@@ -28,6 +28,8 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
   const [activeModal, setActiveModal] = useState<PlanModal | null>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [railEdges, setRailEdges] = useState({ back: false, forward: false });
   const hideSavedAmounts = masked;
   const entries = [...dataset.entries].sort((a, b) => a.date.localeCompare(b.date));
   const latest = entries.at(-1);
@@ -67,6 +69,23 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
   }, [activeModal]);
 
   const goals = useMemo(() => dataset.goals ?? [], [dataset.goals]);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const updateRailEdges = () => setRailEdges({ back: el.scrollLeft > 1, forward: el.scrollLeft < el.scrollWidth - el.clientWidth - 1 });
+    updateRailEdges();
+    el.addEventListener("scroll", updateRailEdges, { passive: true });
+    const observer = new ResizeObserver(updateRailEdges);
+    observer.observe(el);
+    return () => { el.removeEventListener("scroll", updateRailEdges); observer.disconnect(); };
+  }, [goals.length]);
+  function scrollGoalsByCard(direction: 1 | -1) {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>(".goal-plan-card");
+    const step = (card ? card.offsetWidth + 14 : 394) * direction;
+    el.scrollBy({ left: step, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
   function addGoal(event: FormEvent) {
     event.preventDefault();
     const targetAmount = Number(amount.replace(/,/g, ""));
@@ -78,7 +97,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
     setGoalFormOpen(false);
   }
   function deleteGoal(id: string) { onChange({ ...dataset, goals: goals.filter((goal) => goal.id !== id) }); }
-  function beginEdit(goal: Goal) { setEditingId(goal.id); setGoalFormOpen(true); setName(goal.name); setAmount(String(goal.targetAmount)); setTargetDate(goal.targetDate ?? ""); setGoalType(goal.type); }
+  function beginEdit(goal: Goal) { setEditingId(goal.id); setGoalFormOpen(true); setName(goal.name); setAmount(String(goal.targetAmount)); setTargetDate(goal.targetDate ?? ""); setGoalType(goal.type); document.getElementById(`goal-card-${goal.id}`)?.scrollIntoView({ block: "nearest", inline: "nearest" }); }
   function saveGoalEdit(event: FormEvent) {
     event.preventDefault();
     const current = goals.find((goal) => goal.id === editingId);
@@ -140,8 +159,11 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
   return <div className="page-content plan-page page-enter">
     {!latest ? <div className="empty-panel"><h3>Add a snapshot to start planning</h3><p>Your current wealth and progress will appear here.</p></div> : null}
     <section className="plan-goals-section ruled-panel" aria-labelledby="goals-heading">
-      <div className="section-heading"><div><h2 id="goals-heading">Goals</h2><p>What are you building towards, with a projected date?</p></div></div>
-      <div className="goal-list">{goals.map((goal) => {
+      <div className="section-heading">
+        <div><h2 id="goals-heading">Goals</h2><p>What are you building towards, with a projected date?</p></div>
+        {goals.length && !goalFormOpen ? <button className="text-action goals-add-action" type="button" onClick={() => setGoalFormOpen(true)}>+ Add your own goal <span aria-hidden="true">›</span></button> : null}
+      </div>
+      {goals.length ? <div className="goal-scroller" ref={scrollerRef} tabIndex={0} aria-label="Goal cards">{goals.map((goal) => {
         const progress = totals ? Math.min(100, Math.max(0, totals.netWorth / goal.targetAmount * 100)) : 0;
         const assumedReturn = dataset.settings.expectedMarketReturn;
         const showZeroReturnScenario = dataset.settings.showZeroReturnScenario;
@@ -169,7 +191,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
           ? `Based on trailing 6/12-month capital pace. ${projectionDetails.join(". ")}.`
           : null;
         const projectionCopy = masked ? "Your projection is hidden while amounts are masked." : reached ? "You have reached this target." : projectionBasis ? `${projectionBasis}${goal.targetDate ? ` Your target date is ${formatDateLabel(goal.targetDate)}.` : ""} Change your saving pace or market return assumption below.` : "A projection needs at least two snapshots and a positive recorded capital pace.";
-        return <article className="goal-plan-card" key={goal.id}>
+        return <article className="goal-plan-card" key={goal.id} id={`goal-card-${goal.id}`}>
           <div className="goal-feature-progress">
             <p className="goal-feature-eyebrow">{goal.type === "long-term" ? "Long-term goal" : "Short-term milestone"}</p>
             <h3>{goal.name}</h3>
@@ -182,7 +204,13 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
             <div className="goal-feature-actions"><button className="goal-feature-primary" type="button" onClick={() => beginEdit(goal)}>Edit target</button><button className="goal-feature-secondary" type="button" onClick={() => deleteGoal(goal.id)} aria-label={`Remove ${goal.name}`}>Remove</button></div>
           </div>
         </article>;
-      })}</div>
+      })}</div> : null}
+      {goals.length && (railEdges.back || railEdges.forward) ? <div className="goal-rail-footer">
+        <div className="goal-rail-arrows">
+          <button type="button" className="goal-rail-arrow" aria-label="Scroll goals backward" disabled={!railEdges.back} onClick={() => scrollGoalsByCard(-1)}><span aria-hidden="true">‹</span></button>
+          <button type="button" className="goal-rail-arrow" aria-label="Scroll goals forward" disabled={!railEdges.forward} onClick={() => scrollGoalsByCard(1)}><span aria-hidden="true">›</span></button>
+        </div>
+      </div> : null}
       {!goals.length && !goalFormOpen ? <article className="goal-empty-feature"><div><p className="goal-feature-eyebrow">Start planning</p><h3>Choose a goal to track</h3></div><div><p>Add a target to see your progress and a projected date based on your saved snapshots.</p><button className="goal-feature-primary" type="button" onClick={() => setGoalFormOpen(true)}>Set a target</button></div></article> : null}
       {goalFormOpen ? <form className="goal-create-form" onSubmit={editingId ? saveGoalEdit : addGoal}>
         <h3>{editingId ? "Edit goal" : "Add a goal"}</h3>
@@ -191,7 +219,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
         <FormSelect label="Goal type" value={goalType} onChange={(event) => setGoalType(event.target.value as Goal["type"])} options={[{ value: "milestone", label: "Short-term milestone" }, { value: "long-term", label: "Long-term goal" }]} />
         <FormInput label={<>Target date <span className="optional-label">Optional</span></>} type="date" value={targetDate} onChange={(event) => setTargetDate(event.target.value)} />
         <div className="goal-form-actions"><button className="primary-action" type="submit">{editingId ? "Save goal" : "Add goal"}</button><button className="quiet-button" type="button" onClick={cancelGoalForm}>Cancel</button></div>
-      </form> : goals.length ? <button className="text-action" type="button" onClick={() => setGoalFormOpen(true)}>+ Add your own goal <span aria-hidden="true">›</span></button> : null}
+      </form> : null}
     </section>
 
     <section className="ruled-panel plan-metrics" aria-labelledby="plan-metrics-title"><div className="section-heading"><div><h2 id="plan-metrics-title">Your pace</h2><p>Calculated only when the needed inputs are available.</p></div></div>
