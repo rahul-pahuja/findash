@@ -32,7 +32,7 @@ export function Charts({ response, dataset, masked, themeMode, chartRange, onCha
   const latestTotals = latest ? getSnapshotTotals(latest) : null;
   const chartGrid = themeMode === "dark" ? "rgba(245,244,239,.10)" : "rgba(22,22,20,.09)";
   const chartLabel = themeMode === "dark" ? "#AAA9A2" : "#75736D";
-  const notes = progressionEntries.filter((entry) => Boolean(entry.expenses_note.trim()));
+  const notes = progressionEntries.filter((entry) => Boolean((entry.expensesNote ?? "").trim()));
   const progressionPoints = progressionEntries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: getSnapshotTotals(entry).netWorth }));
   const hardCapitalPoints = progressionEntries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: getSnapshotTotals(entry).hardCapital }));
   const progressionAxis = getNiceAxisBounds([...progressionPoints, ...hardCapitalPoints].map((point) => point.y));
@@ -140,8 +140,8 @@ export function Charts({ response, dataset, masked, themeMode, chartRange, onCha
           afterBody(items) {
             const timestamp = Number(items[0]?.parsed.x ?? 0);
             const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
-            if (!entry?.expenses_note) return [];
-            const note = entry.expenses_note.trim();
+            if (!entry?.expensesNote) return [];
+            const note = (entry.expensesNote ?? "").trim();
             return [`Note: ${note.length > 78 ? `${note.slice(0, 75).trimEnd()}…` : note}`];
           }
         }
@@ -179,9 +179,9 @@ export function Charts({ response, dataset, masked, themeMode, chartRange, onCha
   };
 
   const allocationItems = latest ? [
-    ...ASSET_KEYS.map((asset) => ({ key: asset, label: ASSET_LABELS[asset], value: latest.market_assets[asset].current })),
+    ...ASSET_KEYS.map((asset) => ({ key: asset, label: ASSET_LABELS[asset], value: latest.marketAssets?.[asset]?.current ?? 0 })),
     { key: "liquid", label: "Cash buffer", value: latestTotals?.liquidBuffer ?? 0 },
-    { key: "other", label: "Deposits + wallet", value: latest.hard_assets.fd + latest.hard_assets.stocks_wallet }
+    { key: "other", label: "Deposits + wallet", value: (latest.hardAssets?.fd ?? 0) + (latest.hardAssets?.stocksWallet ?? 0) }
   ].filter((item) => item.value > 0).sort((a, b) => b.value - a.value) : [];
   const allocationTotal = latestTotals?.netWorth ?? 0;
   const largestAllocation = allocationTotal > 0 ? allocationItems[0] : null;

@@ -3,7 +3,7 @@ import type { DataResponse, Entry, RangeKey } from "../lib/types";
 import { ASSET_KEYS } from "../utils/config";
 import { formatCompactCurrency, formatDateLabel, formatSigned } from "../utils/format";
 import { getPeakDrawdown, getRegularCapitalPace, getSnapshotTotals } from "../utils/insights";
-import { estimateDate, projectedMonths } from "../utils/goalProjection";
+import { estimateDate, pickNextGoal, projectedMonths } from "../utils/goalProjection";
 import { Charts } from "./Charts";
 import { CompactCurrency } from "./CompactCurrency";
 import { TableView } from "./TableView";
@@ -32,10 +32,9 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
   const change = priorTotals ? totals.netWorth - priorTotals.netWorth : null;
   const drawdown = getPeakDrawdown(entries);
   const latestDerived = response.derived[latest.id];
-  const marketPortfolio = latestDerived?.marketExposure ?? ASSET_KEYS.reduce((sum, asset) => sum + latest.market_assets[asset].current, 0);
-  const nextGoal = [...response.dataset.goals]
-    .filter((goal) => goal.type === "milestone" && goal.targetAmount > totals.netWorth)
-    .sort((a, b) => a.targetAmount - b.targetAmount)[0] ?? null;
+  const marketPortfolio = latestDerived?.marketExposure ?? ASSET_KEYS.reduce((sum, asset) => sum + (latest.marketAssets?.[asset]?.current ?? 0), 0);
+  const nextGoal = pickNextGoal(response.dataset.goals, totals.netWorth);
+  const nextGoalEyebrow = nextGoal ? (nextGoal.type === "milestone" ? "Next milestone" : "Long-term goal") : "Next milestone";
   const goalProgress = nextGoal ? Math.min(100, Math.max(0, totals.netWorth / nextGoal.targetAmount * 100)) : 0;
   const capitalPace = getRegularCapitalPace(entries, 6);
   const expectedReturn = response.dataset.settings.expectedMarketReturn;
@@ -78,8 +77,8 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
           {drawdown && drawdown.amount < 0 ? <span className="peak-pill">{masked ? "••% below peak" : `${Math.abs(drawdown.percent * 100).toFixed(1)}% below peak`} · {displayDate(drawdown.peak.date, false)}</span> : <span className="peak-pill">At recorded peak</span>}
           {hardCapitalChange !== null && marketMovement !== null ? <p className="hero-note">Hard capital changed <strong>{formatSigned(hardCapitalChange, masked)}</strong>; market movement changed <strong>{formatSigned(marketMovement, masked)}</strong> since {displayDate(previous!.date, false)}.</p> : null}
         </div>
-        {nextGoal ? <aside className="goal-tile" aria-label={`Next milestone: ${nextGoal.name}`}>
-          <div className="goal-tile-heading-row"><p className="goal-tile-eyebrow">Next milestone</p><span className="goal-tile-heading-separator" aria-hidden="true" /><h3 className="goal-tile-name">{nextGoal.name}</h3></div>
+        {nextGoal ? <aside className="goal-tile" aria-label={`${nextGoalEyebrow}: ${nextGoal.name}`}>
+          <div className="goal-tile-heading-row"><p className="goal-tile-eyebrow">{nextGoalEyebrow}</p><span className="goal-tile-heading-separator" aria-hidden="true" /><h3 className="goal-tile-name">{nextGoal.name}</h3></div>
           <p className="goal-tile-amount"><CompactCurrency value={nextGoal.targetAmount} masked={masked} /></p>
           <div className="goal-progress-track" role="progressbar" aria-label={`${nextGoal.name} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={masked ? undefined : Math.round(goalProgress)} aria-valuetext={masked ? "Progress hidden" : `${goalProgress.toFixed(1)}% complete`}><span style={{ width: masked ? "0%" : `${goalProgress}%` }} /></div>
           <div className="goal-progress-labels"><span>{masked ? "••% complete" : `${goalProgress.toFixed(1)}% there`}</span><span>{formatCompactCurrency(Math.max(0, nextGoal.targetAmount - totals.netWorth), masked)} to go</span></div>

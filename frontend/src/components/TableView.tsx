@@ -81,7 +81,7 @@ export function TableView({ entries, allEntries = entries, masked, onEdit, maxRo
               const changePercent = previousWorth !== null && previousWorth > 0 ? (change ?? 0) / previousWorth : null;
               const label = formatDateLabel(entry.date);
               return <tr key={entry.id}>
-                <td className="snapshot-date-cell"><strong className="snapshot-date">{label}</strong><span className="snapshot-note" title={entry.expenses_note || "No note"}>{entry.expenses_note || "Monthly snapshot"}</span></td>
+                <td className="snapshot-date-cell"><strong className="snapshot-date">{label}</strong><span className="snapshot-note" title={entry.expensesNote || "No note"}>{entry.expensesNote || "Monthly snapshot"}</span></td>
                 <td className="numeric net-worth-cell"><span className="mobile-label">Net worth</span>{formatCurrency(totals.netWorth, masked)}</td>
                 <td className="numeric change-cell"><span className="mobile-label">Change</span>{change === null ? <span className="table-muted">First snapshot</span> : <><strong className={change < 0 ? "is-negative" : "is-positive"}>{formatSigned(change, masked)}</strong><small>{changePercent === null ? "—" : formatSignedPercent(changePercent, masked)} since {formatDateLabel(previous!.date)}</small></>}</td>
                 {!compact ? <td className="numeric"><span className="mobile-label">Hard capital</span>{formatCurrency(totals.hardCapital, masked)}</td> : null}

@@ -12,10 +12,10 @@ export interface SnapshotTotals {
 }
 
 export function getSnapshotTotals(entry: Entry): SnapshotTotals {
-  const liquidAndHard = entry.liquid.bank + entry.liquid.sodexo
-    + entry.hard_assets.fd + entry.hard_assets.stocks_wallet;
-  const invested = ASSET_KEYS.reduce((sum, asset) => sum + (entry.market_assets[asset]?.invested ?? 0), 0);
-  const marketValue = ASSET_KEYS.reduce((sum, asset) => sum + (entry.market_assets[asset]?.current ?? 0), 0);
+  const liquidAndHard = (entry.liquid?.bank ?? 0) + (entry.liquid?.sodexo ?? 0)
+    + (entry.hardAssets?.fd ?? 0) + (entry.hardAssets?.stocksWallet ?? 0);
+  const invested = ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.invested ?? 0), 0);
+  const marketValue = ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.current ?? 0), 0);
   const netWorth = liquidAndHard + marketValue;
   const hardCapital = liquidAndHard + invested;
   return {
@@ -23,7 +23,7 @@ export function getSnapshotTotals(entry: Entry): SnapshotTotals {
     hardCapital,
     unrealizedGain: netWorth - hardCapital,
     marketValue,
-    liquidBuffer: entry.liquid.bank + entry.liquid.sodexo
+    liquidBuffer: (entry.liquid?.bank ?? 0) + (entry.liquid?.sodexo ?? 0)
   };
 }
 

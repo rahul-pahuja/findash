@@ -26,15 +26,15 @@ const emptyEntry = (): Entry => ({
   id: "",
   date: localToday(),
   liquid: { bank: 0, sodexo: 0 },
-  hard_assets: { stocks_wallet: 0, fd: 0 },
-  market_assets: {
-    mutual_funds: { invested: 0, current: 0 },
+  hardAssets: { stocksWallet: 0, fd: 0 },
+  marketAssets: {
+    mutualFunds: { invested: 0, current: 0 },
     nps: { invested: 0, current: 0 },
-    stock_market: { invested: 0, current: 0 },
+    stockMarket: { invested: 0, current: 0 },
     crypto: { invested: 0, current: 0 }
   },
   oneOffs: [],
-  expenses_note: ""
+  expensesNote: ""
 });
 
 function draftFromLatest(entries: Entry[], initialDate?: string) {
@@ -46,18 +46,18 @@ function draftFromLatest(entries: Entry[], initialDate?: string) {
     ...(JSON.parse(JSON.stringify(latest)) as Entry),
     id: "",
     date: targetDate,
-    expenses_note: ""
+    expensesNote: ""
   };
 }
 
 function netWorthFor(entry: Entry) {
-  const balances = entry.liquid.bank + entry.liquid.sodexo + entry.hard_assets.stocks_wallet + entry.hard_assets.fd;
-  return balances + ASSET_KEYS.reduce((sum, asset) => sum + entry.market_assets[asset].current, 0);
+  const balances = (entry.liquid?.bank ?? 0) + (entry.liquid?.sodexo ?? 0) + (entry.hardAssets?.stocksWallet ?? 0) + (entry.hardAssets?.fd ?? 0);
+  return balances + ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.current ?? 0), 0);
 }
 
 function hardCapitalFor(entry: Entry) {
-  const balances = entry.liquid.bank + entry.liquid.sodexo + entry.hard_assets.stocks_wallet + entry.hard_assets.fd;
-  return balances + ASSET_KEYS.reduce((sum, asset) => sum + entry.market_assets[asset].invested, 0);
+  const balances = (entry.liquid?.bank ?? 0) + (entry.liquid?.sodexo ?? 0) + (entry.hardAssets?.stocksWallet ?? 0) + (entry.hardAssets?.fd ?? 0);
+  return balances + ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.invested ?? 0), 0);
 }
 
 function dateLabel(date: string) {
@@ -83,7 +83,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
     setDraft(nextDraft);
     initialDraftRef.current = JSON.stringify(nextDraft);
     dirtyRef.current = false;
-    setNoteOpen(Boolean(entry?.expenses_note));
+    setNoteOpen(Boolean(entry?.expensesNote));
     setEditingAmounts({});
     setOneOffLabel(""); setOneOffAmount(""); setOneOffType("inflow");
     setOneOffOpen(false);
@@ -145,7 +145,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
     });
   };
 
-  const handleBase = (field: "date" | "expenses_note", value: string) => {
+  const handleBase = (field: "date" | "expensesNote", value: string) => {
     setDraft((current) => {
       const next = { ...current, [field]: value };
       if (field === "date" && value) next.id = value;
@@ -175,10 +175,10 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   );
 
   const balanceFields = [
-    { label: "Bank balance", id: "snapshot-bank", value: draft.liquid.bank, path: "liquid.bank" },
-    { label: "Sodexo / Other Cash", id: "snapshot-sodexo", value: draft.liquid.sodexo, path: "liquid.sodexo" },
-    { label: "Stocks wallet", id: "snapshot-wallet", value: draft.hard_assets.stocks_wallet, path: "hard_assets.stocks_wallet" },
-    { label: "Fixed deposit", id: "snapshot-fd", value: draft.hard_assets.fd, path: "hard_assets.fd" }
+    { label: "Bank balance", id: "snapshot-bank", value: draft.liquid?.bank ?? 0, path: "liquid.bank" },
+    { label: "Sodexo / Other Cash", id: "snapshot-sodexo", value: draft.liquid?.sodexo ?? 0, path: "liquid.sodexo" },
+    { label: "Stocks wallet", id: "snapshot-wallet", value: draft.hardAssets?.stocksWallet ?? 0, path: "hardAssets.stocksWallet" },
+    { label: "Fixed deposit", id: "snapshot-fd", value: draft.hardAssets?.fd ?? 0, path: "hardAssets.fd" }
   ];
 
   const netWorth = netWorthFor(draft);
@@ -192,7 +192,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   const isToday = draft.date === localToday();
   const hasCarryForward = entries.some((item) => item.date <= localToday());
   const balanceSubtotal = balanceFields.reduce((total, field) => total + field.value, 0);
-  const marketSubtotal = ASSET_KEYS.reduce((total, asset) => total + draft.market_assets[asset].current, 0);
+  const marketSubtotal = ASSET_KEYS.reduce((total, asset) => total + (draft.marketAssets?.[asset]?.current ?? 0), 0);
   const saveDraft = () => {
     onSave({ ...draft, id: draft.date });
     onClose();
@@ -289,8 +289,8 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
             </div>
             <div className="snapshot-investment-list snapshot-form-surface">
               {ASSET_KEYS.map((asset) => {
-                const invested = draft.market_assets[asset].invested ?? 0;
-                const current = draft.market_assets[asset].current ?? 0;
+                const invested = draft.marketAssets?.[asset]?.invested ?? 0;
+                const current = draft.marketAssets?.[asset]?.current ?? 0;
                 const gain = current - invested;
                 const hasValues = invested !== 0 || current !== 0;
                 const percent = invested > 0 ? ` (${formatSignedPercent(gain / invested, false)})` : "";
@@ -298,12 +298,12 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
                   <article className="snapshot-investment-row" key={asset}>
                     <div className="snapshot-investment-main">
                       <h4><i className={`snapshot-asset-dot is-${asset}`} />{ASSET_LABELS[asset]}</h4>
-                      {amountInput(`${ASSET_LABELS[asset]} current value`, `snapshot-${asset}-current`, draft.market_assets[asset].current, `market_assets.${asset}.current`, "snapshot-current-value")}
+                      {amountInput(`${ASSET_LABELS[asset]} current value`, `snapshot-${asset}-current`, draft.marketAssets?.[asset]?.current ?? 0, `marketAssets.${asset}.current`, "snapshot-current-value")}
                     </div>
                     <div className="snapshot-investment-meta">
                       <label className="snapshot-invested-editable" htmlFor={`snapshot-${asset}-invested`}>
                         <span>Invested</span>
-                        {amountInput(`${ASSET_LABELS[asset]} invested`, `snapshot-${asset}-invested`, draft.market_assets[asset].invested, `market_assets.${asset}.invested`)}
+                        {amountInput(`${ASSET_LABELS[asset]} invested`, `snapshot-${asset}-invested`, draft.marketAssets?.[asset]?.invested ?? 0, `marketAssets.${asset}.invested`)}
                       </label>
                       <p className={`snapshot-investment-performance${gain < 0 ? " is-negative" : ""}${hasValues ? "" : " is-neutral"}`}>
                         {hasValues ? masked ? "₹ ••••" : <>{formatSigned(gain, false)}{percent}</> : "—"}
@@ -336,13 +336,13 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
               onClick={() => setNoteOpen((value) => !value)}
             >
               <span aria-hidden="true">{noteOpen ? "−" : "+"}</span>
-              <span id="snapshot-notes-heading">{draft.expenses_note ? "Edit note" : "Add a note"}</span>
+              <span id="snapshot-notes-heading">{draft.expensesNote ? "Edit note" : "Add a note"}</span>
               {!noteOpen ? <span className="snapshot-note-hint">Shows as a marker on your charts</span> : null}
             </button>
             {noteOpen && (
               <div id="snapshot-note-content" className="snapshot-note-content field entry-field">
                 <label htmlFor="snapshot-note" className="sr-only">Snapshot note</label>
-                <textarea id="snapshot-note" value={draft.expenses_note} onChange={(event) => handleBase("expenses_note", event.target.value)} rows={2} placeholder="Add context for a major expense or portfolio change" />
+                <textarea id="snapshot-note" value={draft.expensesNote} onChange={(event) => handleBase("expensesNote", event.target.value)} rows={2} placeholder="Add context for a major expense or portfolio change" />
                 <span className="snapshot-note-helper">Shows as a marker on your charts.</span>
               </div>
             )}

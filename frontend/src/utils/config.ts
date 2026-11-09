@@ -10,21 +10,21 @@ export const RANGE_OPTIONS: Array<{ key: RangeKey; label: string }> = [
   { key: "ALL", label: "All" }
 ];
 
-export const ASSET_KEYS = ["mutual_funds", "nps", "stock_market", "crypto"] as const;
+export const ASSET_KEYS = ["mutualFunds", "nps", "stockMarket", "crypto"] as const;
 
 export const ASSET_LABELS: Record<string, string> = {
-  mutual_funds: "Mutual funds",
+  mutualFunds: "Mutual funds",
   nps: "NPS",
-  stock_market: "Stocks",
+  stockMarket: "Stocks",
   crypto: "Crypto",
   liquid: "Liquid",
   fd: "FD",
-  stocks_wallet: "Stocks Wallet"
+  stocksWallet: "Stocks Wallet"
 };
 
 export const ASSET_COLORS: Record<string, string> = {
-  mutual_funds: "#2447F5",
-  stock_market: "#FF6A3D",
+  mutualFunds: "#2447F5",
+  stockMarket: "#FF6A3D",
   nps: "#B58CFF",
   crypto: "#E24C8B",
   liquid: "#1FB5A8",
@@ -32,8 +32,8 @@ export const ASSET_COLORS: Record<string, string> = {
 };
 
 export const DARK_ASSET_COLORS: Record<string, string> = {
-  mutual_funds: "#91A3FF",
-  stock_market: "#FF9A78",
+  mutualFunds: "#91A3FF",
+  stockMarket: "#FF9A78",
   nps: "#D0B6FF",
   crypto: "#FF83B5",
   liquid: "#69D1C1",
@@ -44,14 +44,14 @@ const LIQUIDITY_COLORS = {
   bank: "#1FB5A8",
   sodexo: "#CFF1EE",
   fd: "#0E7A71",
-  stocks_wallet: "#8ADDD5"
+  stocksWallet: "#8ADDD5"
 };
 
 const DARK_LIQUIDITY_COLORS = {
   bank: "#69D1C1",
   sodexo: "#3B615D",
   fd: "#5BBEB0",
-  stocks_wallet: "#467D75"
+  stocksWallet: "#467D75"
 };
 
 export function getAssetPalette(theme: "light" | "dark") {

@@ -3,8 +3,14 @@ SHELL := /bin/zsh
 APP_NAME := findash-app
 FRONTEND_DIR := frontend
 GO_CACHE := $(CURDIR)/.gocache
-PORT ?= 8080
-DATA_FILE ?= $(HOME)/findash/data.json
+
+# Run configuration lives in .env (copy .env.example to .env). Values are
+# forwarded to the server on every run target; inline overrides like
+# `make run PORT=8081` still win over .env. Without .env the server falls
+# back to its own built-in defaults.
+ifneq (,$(wildcard .env))
+-include .env
+endif
 
 .PHONY: help install install-frontend frontend-build frontend-dev backend-build build rebuild test check-port run run-backend start stop status logs clean clean-build clean-cache
 

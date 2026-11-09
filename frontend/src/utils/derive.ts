@@ -9,17 +9,17 @@ export function buildLocalDataResponse(dataset: Dataset, range: RangeKey, sync: 
   let previousNetWorth: number | null = null;
 
   for (const entry of entries) {
-    const liquidBuffer = entry.liquid.bank + entry.liquid.sodexo;
-    const hardBalances = liquidBuffer + entry.hard_assets.fd + entry.hard_assets.stocks_wallet;
-    const invested = ASSET_KEYS.reduce((sum, asset) => sum + (entry.market_assets[asset]?.invested ?? 0), 0);
-    const marketExposure = ASSET_KEYS.reduce((sum, asset) => sum + (entry.market_assets[asset]?.current ?? 0), 0);
+    const liquidBuffer = (entry.liquid?.bank ?? 0) + (entry.liquid?.sodexo ?? 0);
+    const hardBalances = liquidBuffer + (entry.hardAssets?.fd ?? 0) + (entry.hardAssets?.stocksWallet ?? 0);
+    const invested = ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.invested ?? 0), 0);
+    const marketExposure = ASSET_KEYS.reduce((sum, asset) => sum + (entry.marketAssets?.[asset]?.current ?? 0), 0);
     const currentNetWorth = hardBalances + marketExposure;
     const hardCapital = hardBalances + invested;
     const allocationByAsset: Record<string, number> = {};
-    for (const asset of ASSET_KEYS) allocationByAsset[asset] = currentNetWorth > 0 ? (entry.market_assets[asset]?.current ?? 0) / currentNetWorth : 0;
+    for (const asset of ASSET_KEYS) allocationByAsset[asset] = currentNetWorth > 0 ? (entry.marketAssets?.[asset]?.current ?? 0) / currentNetWorth : 0;
     allocationByAsset.liquid = currentNetWorth > 0 ? liquidBuffer / currentNetWorth : 0;
-    allocationByAsset.fd = currentNetWorth > 0 ? entry.hard_assets.fd / currentNetWorth : 0;
-    allocationByAsset.stocks_wallet = currentNetWorth > 0 ? entry.hard_assets.stocks_wallet / currentNetWorth : 0;
+    allocationByAsset.fd = currentNetWorth > 0 ? (entry.hardAssets?.fd ?? 0) / currentNetWorth : 0;
+    allocationByAsset.stocksWallet = currentNetWorth > 0 ? (entry.hardAssets?.stocksWallet ?? 0) / currentNetWorth : 0;
     derived[entry.id] = {
       hardCapital,
       currentNetWorth,

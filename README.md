@@ -6,7 +6,8 @@ It runs as a single Go binary that serves an embedded React frontend, stores dat
 ## What It Does
 
 - Tracks financial snapshots at day-level (`YYYY-MM-DD`)
-- Supports `income.in_hand` and optional per-asset `sip`
+- Maintains income and expense history as effective-dated monthly amounts
+- Manages goal tracking with target amounts and dates
 - Computes derived metrics such as net worth, hard capital, liquid buffer, unrealized gain, and contribution analytics
 - Computes XIRR on demand across:
   - life portfolio
@@ -37,8 +38,9 @@ financial-dashboard/
 └── README.md
 ```
 
-The app creates `data.json` with sample data on first run. Build outputs, local
-data, and machine-specific files are not part of the source tree.
+The app creates a dataset with sample data at the configured data file
+on first run. Build outputs, local data, and machine-specific files are
+not part of the source tree.
 
 ## Quick Start
 
@@ -54,7 +56,16 @@ make install
 make build
 ```
 
-### 3. Run it locally
+### 3. Configure (optional)
+
+```bash
+cp .env.example .env
+```
+
+With `.env` in place, `make run` serves the tracked `data.example.json` demo
+dataset. For real data, point `DATA_FILE` at a location outside the repo.
+
+### 4. Run it locally
 
 ```bash
 make run
@@ -86,47 +97,61 @@ The Makefile also defines `start`, `stop`, `status`, and `logs` targets for a
 macOS `launchctl` wrapper. The `./findash` wrapper is not included in this
 checkout, so those daemon targets need that script before they can be used.
 
+## Configuration
+
+The Makefile loads machine-specific settings from a git-ignored `.env` file.
+Copy the tracked example to get started:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Forwards as | Example |
+| --- | --- | --- |
+| `PORT` | `FINDASH_PORT` server env | `8080` |
+| `DATA_FILE` | `FINDASH_DATA` server env | `data.example.json` demo default; `$(HOME)/your/folder/data.json` for personal data |
+
+`DATA_FILE` accepts a make expression, so an absolute path like `$(HOME)/findash/data.json` works as written. Precedence: inline `make` overrides (e.g. `make run PORT=8081`) win over `.env`. Without `.env` the server falls back to its own built-in defaults.
+
 ## Data Model
 
-The canonical dataset lives in `data.json`, stored outside this repository at `$(HOME)/findash/data.json` by default. Override the location with `make run DATA_FILE=/path/to/data.json` or the `FINDASH_DATA` environment variable. The file is git-ignored and never committed.
+The canonical dataset lives in `data.json`, stored outside this repository so personal data can never be committed — set the location with `DATA_FILE` in `.env` (for example `$(HOME)/findash/data.json`), or override per run with `make run DATA_FILE=/path/to/data.json`. The file is never committed.
 
 ```json
 {
+  "schemaVersion": 2,
   "entries": [
     {
       "id": "2025-03-31",
       "date": "2025-03-31",
-      "income": { "in_hand": 88000 },
       "liquid": { "bank": 52000, "sodexo": 3500 },
-      "hard_assets": { "stocks_wallet": 15000, "fd": 100000 },
-      "market_assets": {
-        "mutual_funds": { "invested": 200000, "current": 231000 },
+      "hardAssets": { "stocksWallet": 15000, "fd": 100000 },
+      "marketAssets": {
+        "mutualFunds": { "invested": 200000, "current": 231000 },
         "nps": { "invested": 80000, "current": 88500 },
-        "stock_market": { "invested": 60000, "current": 54200 },
+        "stockMarket": { "invested": 60000, "current": 54200 },
         "crypto": { "invested": 20000, "current": 27400 }
       },
-      "sip": {
-        "mutual_funds": 10000,
-        "nps": 5000,
-        "stock_market": 1000,
-        "crypto": 3000
-      },
-      "expenses_note": "Paid insurance premium"
+      "oneOffs": [],
+      "expensesNote": "Paid insurance premium"
     }
   ],
+  "incomeHistory": [],
+  "expenseHistory": [],
+  "goals": [],
   "meta": {
     "currency": "INR",
     "created": "2025-01-01",
-    "last_updated": "2025-03-31"
+    "lastUpdated": "2025-03-31"
   }
 }
 ```
 
 ### Field Notes
 
-- `income.in_hand` is the canonical snapshot income field
-- `sip` is optional and represents actual contributions captured for that snapshot
-- `market_assets[*].invested` and `market_assets[*].current` are cumulative snapshot values
+- all dataset keys are lowerCamelCase (`hardAssets`, `marketAssets`, `expensesNote`, `lastUpdated`)
+- `marketAssets[*].invested` and `marketAssets[*].current` are cumulative snapshot values
+- `incomeHistory` and `expenseHistory` store effective-dated monthly amounts (`from`, `monthlyAmount`)
 - `data.json` is only updated when the user explicitly saves
 - browser `localStorage` is the active working state during editing
 

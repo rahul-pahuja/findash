@@ -49,10 +49,10 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
   const netWorthColor = themeMode === "dark" ? "#91A3FF" : "#2447F5";
   const marketFill = themeMode === "dark" ? "rgba(104,120,179,.28)" : "rgba(184,196,255,.55)";
   const liquidity = latest ? [
-    { key: "bank", label: "Bank balance", value: latest.liquid.bank, color: liquidityColors.bank },
-    { key: "sodexo", label: "Sodexo / other cash", value: latest.liquid.sodexo, color: liquidityColors.sodexo },
-    { key: "fd", label: "Fixed deposit", value: latest.hard_assets.fd, color: liquidityColors.fd },
-    { key: "stocks_wallet", label: "Stocks wallet", value: latest.hard_assets.stocks_wallet, color: liquidityColors.stocks_wallet }
+    { key: "bank", label: "Bank balance", value: latest.liquid?.bank ?? 0, color: liquidityColors.bank },
+    { key: "sodexo", label: "Sodexo / other cash", value: latest.liquid?.sodexo ?? 0, color: liquidityColors.sodexo },
+    { key: "fd", label: "Fixed deposit", value: latest.hardAssets?.fd ?? 0, color: liquidityColors.fd },
+    { key: "stocksWallet", label: "Stocks wallet", value: latest.hardAssets?.stocksWallet ?? 0, color: liquidityColors.stocksWallet }
   ] : [];
   const availableLiquidity = liquidity.reduce((sum, item) => sum + item.value, 0);
   const chartLabel = themeMode === "dark" ? "#AAA9A2" : "#75736D";
@@ -221,7 +221,7 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
       <section className="ruled-panel asset-trends-panel" aria-labelledby="asset-trends-heading">
         <div className="section-heading"><div><h2 id="asset-trends-heading">Unrealized gain / loss by asset</h2><p>Current value minus invested principal at each snapshot.</p></div></div>
         {entries.length > 0 ? <div className="asset-trend-grid">{ASSET_KEYS.map((asset) => <AssetTrend key={asset} asset={asset} entries={entries} masked={masked} tone={assetColors[asset]} chartLabel={chartLabel} chartGrid={chartGrid} />)}</div> : <p className="panel-empty">No snapshots in this period.</p>}
-        {entries.length > 0 ? <details className="trend-data-details"><summary><span>View exact values</span><i aria-hidden="true" /></summary><div className="trend-table-scroll"><table className="trend-table"><thead><tr><th>Snapshot</th>{ASSET_KEYS.map((asset) => <th key={asset}>{ASSET_LABELS[asset]}</th>)}</tr></thead><tbody>{[...entries].reverse().map((entry) => <tr key={entry.id}><th>{fullDate(entry.date)}</th>{ASSET_KEYS.map((asset) => { const value = entry.market_assets[asset].current - entry.market_assets[asset].invested; const tone = masked ? "" : value > 0 ? "is-positive" : value < 0 ? "is-negative" : "trend-value-neutral"; return <td key={asset} className={tone}>{formatSigned(value, masked)}</td>; })}</tr>)}</tbody></table></div></details> : null}
+        {entries.length > 0 ? <details className="trend-data-details"><summary><span>View exact values</span><i aria-hidden="true" /></summary><div className="trend-table-scroll"><table className="trend-table"><thead><tr><th>Snapshot</th>{ASSET_KEYS.map((asset) => <th key={asset}>{ASSET_LABELS[asset]}</th>)}</tr></thead><tbody>{[...entries].reverse().map((entry) => <tr key={entry.id}><th>{fullDate(entry.date)}</th>{ASSET_KEYS.map((asset) => { const value = (entry.marketAssets?.[asset]?.current ?? 0) - (entry.marketAssets?.[asset]?.invested ?? 0); const tone = masked ? "" : value > 0 ? "is-positive" : value < 0 ? "is-negative" : "trend-value-neutral"; return <td key={asset} className={tone}>{formatSigned(value, masked)}</td>; })}</tr>)}</tbody></table></div></details> : null}
       </section>
       </> : null}
     </div>
@@ -233,7 +233,7 @@ function MovementRow({ label, value, masked, tone }: { label: string; value: num
 }
 
 function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { asset: string; entries: Entry[]; masked: boolean; tone: string; chartLabel: string; chartGrid: string }) {
-  const points = entries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: entry.market_assets[asset].current - entry.market_assets[asset].invested }));
+  const points = entries.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: (entry.marketAssets?.[asset]?.current ?? 0) - (entry.marketAssets?.[asset]?.invested ?? 0) }));
   const latest = points[points.length - 1]?.y ?? 0;
   const values = points.map((point) => point.y);
   const axis = getNiceAxisBounds(values);

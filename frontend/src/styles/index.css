@@ -455,8 +455,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .snapshot-investment-main, .snapshot-investment-meta { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .65fr); align-items: center; gap: 18px; }
 .snapshot-investment-main h4 { display: flex; align-items: center; gap: 9px; margin: 0; color: var(--ink); font-size: 15px; font-weight: 550; }
 .snapshot-asset-dot { width: 9px; height: 9px; flex: none; border-radius: 50%; background: var(--asset-other); }
-.snapshot-asset-dot.is-mutual_funds { background: var(--asset-mf); }
-.snapshot-asset-dot.is-stock_market { background: var(--asset-stocks); }
+.snapshot-asset-dot.is-mutualFunds { background: var(--asset-mf); }
+.snapshot-asset-dot.is-stockMarket { background: var(--asset-stocks); }
 .snapshot-asset-dot.is-nps { background: var(--asset-nps); }
 .snapshot-asset-dot.is-crypto { background: var(--asset-crypto); }
 .snapshot-investment-meta { min-height: 27px; }

@@ -100,7 +100,7 @@ func ComputeDerived(data store.Dataset) map[string]DerivedMetric {
 		if currentNetWorth > 0 {
 			allocation["liquid"] = (entry.Liquid.Bank + entry.Liquid.Sodexo) / currentNetWorth
 			allocation["fd"] = entry.HardAssets.FD / currentNetWorth
-			allocation["stocks_wallet"] = entry.HardAssets.StocksWallet / currentNetWorth
+			allocation["stocksWallet"] = entry.HardAssets.StocksWallet / currentNetWorth
 		}
 
 		metric := DerivedMetric{

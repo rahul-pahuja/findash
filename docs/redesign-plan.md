@@ -57,13 +57,13 @@ Typography uses the system SF stack with Inter fallback, tabular numerals, 400/5
       "id": "YYYY-MM-DD",
       "date": "YYYY-MM-DD",
       "liquid": { "bank": 0, "sodexo": 0 },
-      "hard_assets": { "stocks_wallet": 0, "fd": 0 },
-      "market_assets": {},
+      "hardAssets": { "stocksWallet": 0, "fd": 0 },
+      "marketAssets": {},
       "oneOffs": [],
-      "expenses_note": ""
+      "expensesNote": ""
     }
   ],
-  "meta": { "currency": "INR", "created": "", "last_updated": "" },
+  "meta": { "currency": "INR", "created": "", "lastUpdated": "" },
   "incomeHistory": [{ "from": "YYYY-MM-DD", "monthlyAmount": 0 }],
   "expenseHistory": [{ "from": "YYYY-MM-DD", "monthlyAmount": 0 }],
   "goals": [],

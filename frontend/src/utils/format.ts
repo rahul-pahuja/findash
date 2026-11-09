@@ -66,6 +66,12 @@ export function formatDateLabel(value: string, includeYear = true) {
   return includeYear ? `${day} ${monthName} ${year}` : `${day} ${monthName}`;
 }
 
+export function formatDateRangeLabel(start: string, end: string) {
+  if (start === end) return formatDateLabel(start);
+  const crossesYears = Number(start.slice(0, 4)) !== Number(end.slice(0, 4));
+  return `${formatDateLabel(start, crossesYears)} – ${formatDateLabel(end, crossesYears)}`;
+}
+
 export function formatChartMonth(timestamp: number) {
   const date = new Date(timestamp);
   const month = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(date);

@@ -1,3 +1,5 @@
+import type { Goal } from "../lib/types";
+
 export function projectedMonths(current: number, target: number, monthly: number, annualRate: number) {
   if (target <= current) return 0;
   if (monthly <= 0 || annualRate <= -1) return null;
@@ -15,4 +17,13 @@ export function estimateDate(latestDate: string, months: number | null) {
   const [year, month, day] = latestDate.split("-").map(Number);
   const next = new Date(Date.UTC(year, month - 1 + months, day));
   return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }).format(next);
+}
+
+export function pickNextGoal(goals: Goal[], netWorth: number) {
+  const pending = goals.filter((goal) => goal.targetAmount > netWorth);
+  const dated = pending
+    .filter((goal): goal is Goal & { targetDate: string } => Boolean(goal.targetDate))
+    .sort((a, b) => a.targetDate.localeCompare(b.targetDate));
+  if (dated.length) return dated[0];
+  return [...pending].sort((a, b) => a.targetAmount - b.targetAmount)[0] ?? null;
 }

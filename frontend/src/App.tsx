@@ -8,7 +8,7 @@ import { TableView, type SnapshotSortBy, type SortDirection } from "./components
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import type { ApiError, DataResponse, Dataset, Entry, RangeKey, XirrResponse } from "./lib/types";
 import { buildLocalDataResponse } from "./utils/derive";
-import { formatDateLabel, setNumberFormatPreference } from "./utils/format";
+import { formatDateRangeLabel, setNumberFormatPreference } from "./utils/format";
 import { migrateDataset } from "./utils/migrateDataset";
 import { getBigMoves, getMostRecentMissingMonth, selectPeriod } from "./utils/insights";
 import { analyticsPeriodLabel, parseAnalyticsPeriod, resolveRoute, serializeAnalyticsPeriod, type AnalyticsPeriod, type AppPage } from "./utils/router";
@@ -17,7 +17,7 @@ const AnalyticsDashboard = lazy(() => import("./components/AnalyticsDashboard").
 const PlanPage = lazy(() => import("./components/PlanPage").then((module) => ({ default: module.PlanPage })));
 const SettingsPage = lazy(() => import("./components/SettingsPage").then((module) => ({ default: module.SettingsPage })));
 
-const EMPTY_DATASET = migrateDataset({ entries: [], meta: { currency: "INR", created: "", last_updated: "" } });
+const EMPTY_DATASET = migrateDataset({ entries: [], meta: { currency: "INR", created: "", lastUpdated: "" } });
 const STORAGE_KEYS = { dataset: "findash.dataset", theme: "findash.theme", privacy: "findash.privacy", period: "findash.analyticsPeriod" };
 type Banner = { kind: "info" | "error" | "success"; message: string };
 type HistoryFilter = "all" | "notes" | "big-moves";
@@ -298,14 +298,14 @@ export default function App() {
   function editSnapshot(entry: Entry) { setActiveEntry(entry); setEntryInitialDate(undefined); setModalOpen(true); }
   const unresolvedGap = missingMonth && notificationPrefs?.dismissedGapMonth !== missingMonth.key;
   const filteredSnapshots = useMemo(() => {
-    if (historyFilter === "notes") return entries.filter((entry) => Boolean(entry.expenses_note.trim()));
+    if (historyFilter === "notes") return entries.filter((entry) => Boolean((entry.expensesNote ?? "").trim()));
     if (historyFilter === "big-moves") return getBigMoves(entries, 5).map((item) => item.entry);
     return entries;
   }, [entries, historyFilter]);
   const [title, defaultSubtitle] = titleFor(route.page, dataset.settings.profileName.trim());
   const orderedEntries = [...entries].sort((a, b) => a.date.localeCompare(b.date));
   const pageSubtitle = route.page.startsWith("analytics") ? `${route.page === "analytics-overview" ? "Overview" : "Investments"} · ${analyticsPeriodLabel(period)}`
-    : route.page === "snapshots" && orderedEntries.length ? `${orderedEntries.length} records · ${formatDateLabel(orderedEntries[0].date, false)}–${formatDateLabel(orderedEntries.at(-1)!.date, false)}`
+    : route.page === "snapshots" && orderedEntries.length ? `${orderedEntries.length} records · ${formatDateRangeLabel(orderedEntries[0].date, orderedEntries.at(-1)!.date)}`
       : defaultSubtitle;
 
   useEffect(() => {
@@ -375,12 +375,12 @@ export default function App() {
         const normalizedEntry = { ...entry, id: entry.date };
         if (index >= 0) nextEntries[index] = normalizedEntry; else nextEntries.push(normalizedEntry);
         nextEntries.sort((a, b) => a.date.localeCompare(b.date));
-        return { ...current, entries: nextEntries, meta: { ...current.meta, currency: "INR", last_updated: new Date().toISOString().slice(0, 10) } };
+        return { ...current, entries: nextEntries, meta: { ...current.meta, currency: "INR", lastUpdated: new Date().toISOString().slice(0, 10) } };
       });
       setBanner({ kind: "success", message: `Updated snapshot for ${entry.date}. Save to data.json to keep it.` });
       setModalOpen(false);
     }} />
-    {importPreview ? <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setImportPreview(null); }}><section className="import-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="import-preview-title"><button className="dialog-close" type="button" onClick={() => setImportPreview(null)} aria-label="Close">×</button><p className="section-eyebrow">Import preview</p><h2 id="import-preview-title">{isDirty ? "Replace unsaved changes?" : "Import this file?"}</h2><p className="import-preview-file">{importPreview.fileName}</p><dl><div><dt>Snapshots</dt><dd>{importPreview.dataset.entries.length}</dd></div><div><dt>Date range</dt><dd>{importPreview.dataset.entries.length ? `${formatDateLabel([...importPreview.dataset.entries].sort((a,b) => a.date.localeCompare(b.date))[0].date, false)} – ${formatDateLabel([...importPreview.dataset.entries].sort((a,b) => a.date.localeCompare(b.date)).at(-1)!.date, false)}` : "No snapshots"}</dd></div></dl><p>{isDirty ? "This will replace unsaved changes on this device." : "This replaces the current browser copy."}</p><div className="import-preview-actions"><button className="quiet-button" type="button" onClick={() => setImportPreview(null)}>Cancel</button><button className="primary-action" type="button" onClick={confirmImport}>Replace and import</button></div></section></div> : null}
+    {importPreview ? <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setImportPreview(null); }}><section className="import-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="import-preview-title"><button className="dialog-close" type="button" onClick={() => setImportPreview(null)} aria-label="Close">×</button><p className="section-eyebrow">Import preview</p><h2 id="import-preview-title">{isDirty ? "Replace unsaved changes?" : "Import this file?"}</h2><p className="import-preview-file">{importPreview.fileName}</p><dl><div><dt>Snapshots</dt><dd>{importPreview.dataset.entries.length}</dd></div><div><dt>Date range</dt><dd>{importPreview.dataset.entries.length ? formatDateRangeLabel([...importPreview.dataset.entries].sort((a,b) => a.date.localeCompare(b.date))[0].date, [...importPreview.dataset.entries].sort((a,b) => a.date.localeCompare(b.date)).at(-1)!.date) : "No snapshots"}</dd></div></dl><p>{isDirty ? "This will replace unsaved changes on this device." : "This replaces the current browser copy."}</p><div className="import-preview-actions"><button className="quiet-button" type="button" onClick={() => setImportPreview(null)}>Cancel</button><button className="primary-action" type="button" onClick={confirmImport}>Replace and import</button></div></section></div> : null}
     {helpOpen ? <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setHelpOpen(false); }}><section className="shortcut-dialog" role="dialog" aria-modal="true" aria-labelledby="shortcut-title"><button className="dialog-close" type="button" onClick={() => setHelpOpen(false)} aria-label="Close">×</button><p className="section-eyebrow">Keyboard shortcuts</p><h2 id="shortcut-title">Move around FinDash</h2><dl><div><dt>Go to Dashboard</dt><dd>g, then d</dd></div><div><dt>Go to Snapshots</dt><dd>g, then s</dd></div><div><dt>Go to Analytics</dt><dd>g, then a</dd></div><div><dt>Go to Plan</dt><dd>g, then p</dd></div><div><dt>Save to data.json</dt><dd>⌘S / Ctrl S</dd></div><div><dt>Show shortcuts</dt><dd>?</dd></div></dl></section></div> : null}
   </div>;
 }

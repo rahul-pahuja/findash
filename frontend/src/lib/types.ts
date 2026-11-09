@@ -64,17 +64,17 @@ export interface OneOff {
 export interface Meta {
   currency: string;
   created: string;
-  last_updated: string;
+  lastUpdated: string;
 }
 
 export interface Entry {
   id: string;
   date: string;
   liquid: { bank: number; sodexo: number };
-  hard_assets: { stocks_wallet: number; fd: number };
-  market_assets: Record<string, MarketAsset>;
+  hardAssets: { stocksWallet: number; fd: number };
+  marketAssets: Record<string, MarketAsset>;
   oneOffs: OneOff[];
-  expenses_note: string;
+  expensesNote: string;
 }
 
 export interface MarketAsset {

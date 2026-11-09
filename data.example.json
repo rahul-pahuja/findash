@@ -1,0 +1,591 @@
+{
+  "schemaVersion": 2,
+  "entries": [
+    {
+      "id": "2025-01-31",
+      "date": "2025-01-31",
+      "liquid": {
+        "bank": 42000,
+        "sodexo": 3500
+      },
+      "hardAssets": {
+        "stocksWallet": 15000,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 15000,
+          "current": 16600
+        },
+        "mutualFunds": {
+          "invested": 180000,
+          "current": 192500
+        },
+        "nps": {
+          "invested": 70000,
+          "current": 74200
+        },
+        "stockMarket": {
+          "invested": 55000,
+          "current": 53200
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Start of year rebalance and annual subscriptions"
+    },
+    {
+      "id": "2025-02-28",
+      "date": "2025-02-28",
+      "liquid": {
+        "bank": 47000,
+        "sodexo": 3200
+      },
+      "hardAssets": {
+        "stocksWallet": 16000,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 15200,
+          "current": 19300
+        },
+        "mutualFunds": {
+          "invested": 188000,
+          "current": 205400
+        },
+        "nps": {
+          "invested": 75000,
+          "current": 80200
+        },
+        "stockMarket": {
+          "invested": 55500,
+          "current": 57800
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Travel month with a slightly higher cash buffer"
+    },
+    {
+      "id": "2025-03-31",
+      "date": "2025-03-31",
+      "liquid": {
+        "bank": 52000,
+        "sodexo": 3500
+      },
+      "hardAssets": {
+        "stocksWallet": 15500,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 17100,
+          "current": 19300
+        },
+        "mutualFunds": {
+          "invested": 196000,
+          "current": 231000
+        },
+        "nps": {
+          "invested": 80000,
+          "current": 88500
+        },
+        "stockMarket": {
+          "invested": 56000,
+          "current": 54200
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Paid the annual insurance premium"
+    },
+    {
+      "id": "2025-04-30",
+      "date": "2025-04-30",
+      "liquid": {
+        "bank": 58500,
+        "sodexo": 2800
+      },
+      "hardAssets": {
+        "stocksWallet": 16500,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 18000,
+          "current": 18300
+        },
+        "mutualFunds": {
+          "invested": 204000,
+          "current": 218500
+        },
+        "nps": {
+          "invested": 85000,
+          "current": 92100
+        },
+        "stockMarket": {
+          "invested": 57000,
+          "current": 58500
+        }
+      },
+      "oneOffs": [
+        {
+          "id": "oo-2025-04-01",
+          "type": "outflow",
+          "amount": 12000,
+          "label": "Advance tax self-assessment"
+        }
+      ],
+      "expensesNote": "Tax season; advance tax out of the bank"
+    },
+    {
+      "id": "2025-05-31",
+      "date": "2025-05-31",
+      "liquid": {
+        "bank": 61000,
+        "sodexo": 3400
+      },
+      "hardAssets": {
+        "stocksWallet": 17000,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 18200,
+          "current": 17800
+        },
+        "mutualFunds": {
+          "invested": 212000,
+          "current": 236800
+        },
+        "nps": {
+          "invested": 90000,
+          "current": 98700
+        },
+        "stockMarket": {
+          "invested": 57500,
+          "current": 60100
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Steady month with contributions on autopilot"
+    },
+    {
+      "id": "2025-06-30",
+      "date": "2025-06-30",
+      "liquid": {
+        "bank": 55800,
+        "sodexo": 2900
+      },
+      "hardAssets": {
+        "stocksWallet": 17600,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 16900,
+          "current": 16200
+        },
+        "mutualFunds": {
+          "invested": 220000,
+          "current": 214100
+        },
+        "nps": {
+          "invested": 95000,
+          "current": 101200
+        },
+        "stockMarket": {
+          "invested": 58000,
+          "current": 52800
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Market correction month; stayed the course"
+    },
+    {
+      "id": "2025-07-31",
+      "date": "2025-07-31",
+      "liquid": {
+        "bank": 65500,
+        "sodexo": 3300
+      },
+      "hardAssets": {
+        "stocksWallet": 18200,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 17600,
+          "current": 17400
+        },
+        "mutualFunds": {
+          "invested": 228000,
+          "current": 227600
+        },
+        "nps": {
+          "invested": 100000,
+          "current": 106400
+        },
+        "stockMarket": {
+          "invested": 58500,
+          "current": 55400
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Emergency-fund top-up brought the bank buffer back on plan"
+    },
+    {
+      "id": "2025-08-31",
+      "date": "2025-08-31",
+      "liquid": {
+        "bank": 69500,
+        "sodexo": 3150
+      },
+      "hardAssets": {
+        "stocksWallet": 18900,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 18400,
+          "current": 19600
+        },
+        "mutualFunds": {
+          "invested": 236000,
+          "current": 245300
+        },
+        "nps": {
+          "invested": 105000,
+          "current": 112900
+        },
+        "stockMarket": {
+          "invested": 59500,
+          "current": 59300
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Monsoon month with low travel spend"
+    },
+    {
+      "id": "2025-09-30",
+      "date": "2025-09-30",
+      "liquid": {
+        "bank": 72500,
+        "sodexo": 3600
+      },
+      "hardAssets": {
+        "stocksWallet": 19500,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 19800,
+          "current": 21400
+        },
+        "mutualFunds": {
+          "invested": 244000,
+          "current": 259400
+        },
+        "nps": {
+          "invested": 110000,
+          "current": 118700
+        },
+        "stockMarket": {
+          "invested": 60500,
+          "current": 62800
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Festival month; small gold purchase booked in cash"
+    },
+    {
+      "id": "2025-10-31",
+      "date": "2025-10-31",
+      "liquid": {
+        "bank": 66800,
+        "sodexo": 2780
+      },
+      "hardAssets": {
+        "stocksWallet": 20100,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 20400,
+          "current": 20600
+        },
+        "mutualFunds": {
+          "invested": 252000,
+          "current": 247900
+        },
+        "nps": {
+          "invested": 115000,
+          "current": 121800
+        },
+        "stockMarket": {
+          "invested": 61000,
+          "current": 56900
+        }
+      },
+      "oneOffs": [
+        {
+          "id": "oo-2025-10-01",
+          "type": "inflow",
+          "amount": 40000,
+          "label": "Annual performance bonus"
+        },
+        {
+          "id": "oo-2025-10-02",
+          "type": "outflow",
+          "amount": 45000,
+          "label": "Festival shopping and gifts"
+        }
+      ],
+      "expensesNote": "Bonus in, festival spend out"
+    },
+    {
+      "id": "2025-11-30",
+      "date": "2025-11-30",
+      "liquid": {
+        "bank": 77500,
+        "sodexo": 3500
+      },
+      "hardAssets": {
+        "stocksWallet": 20800,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 21200,
+          "current": 22100
+        },
+        "mutualFunds": {
+          "invested": 260000,
+          "current": 271200
+        },
+        "nps": {
+          "invested": 120000,
+          "current": 129100
+        },
+        "stockMarket": {
+          "invested": 62000,
+          "current": 64700
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Quiet month; cash buffer back to plan"
+    },
+    {
+      "id": "2025-12-31",
+      "date": "2025-12-31",
+      "liquid": {
+        "bank": 73500,
+        "sodexo": 3300
+      },
+      "hardAssets": {
+        "stocksWallet": 21400,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 22600,
+          "current": 24000
+        },
+        "mutualFunds": {
+          "invested": 268000,
+          "current": 283500
+        },
+        "nps": {
+          "invested": 125000,
+          "current": 135400
+        },
+        "stockMarket": {
+          "invested": 63000,
+          "current": 61600
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Year-end rebalance and gift purchases"
+    },
+    {
+      "id": "2026-01-31",
+      "date": "2026-01-31",
+      "liquid": {
+        "bank": 81000,
+        "sodexo": 3600
+      },
+      "hardAssets": {
+        "stocksWallet": 22100,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 23200,
+          "current": 23500
+        },
+        "mutualFunds": {
+          "invested": 276000,
+          "current": 292100
+        },
+        "nps": {
+          "invested": 130000,
+          "current": 140800
+        },
+        "stockMarket": {
+          "invested": 63500,
+          "current": 64100
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "New year budget reset"
+    },
+    {
+      "id": "2026-02-28",
+      "date": "2026-02-28",
+      "liquid": {
+        "bank": 87000,
+        "sodexo": 3000
+      },
+      "hardAssets": {
+        "stocksWallet": 22800,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 24700,
+          "current": 25800
+        },
+        "mutualFunds": {
+          "invested": 284000,
+          "current": 301400
+        },
+        "nps": {
+          "invested": 135000,
+          "current": 146300
+        },
+        "stockMarket": {
+          "invested": 64000,
+          "current": 66200
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Short month with steady contributions"
+    },
+    {
+      "id": "2026-03-31",
+      "date": "2026-03-31",
+      "liquid": {
+        "bank": 92000,
+        "sodexo": 3700
+      },
+      "hardAssets": {
+        "stocksWallet": 23500,
+        "fd": 100000
+      },
+      "marketAssets": {
+        "crypto": {
+          "invested": 25100,
+          "current": 25200
+        },
+        "mutualFunds": {
+          "invested": 292000,
+          "current": 312700
+        },
+        "nps": {
+          "invested": 140000,
+          "current": 152100
+        },
+        "stockMarket": {
+          "invested": 65000,
+          "current": 69300
+        }
+      },
+      "oneOffs": [],
+      "expensesNote": "Financial-year close; portfolio review done"
+    }
+  ],
+  "meta": {
+    "currency": "INR",
+    "created": "2025-01-01",
+    "lastUpdated": "2026-03-31"
+  },
+  "incomeHistory": [
+    {
+      "from": "2025-01-01",
+      "monthlyAmount": 85000
+    },
+    {
+      "from": "2025-10-01",
+      "monthlyAmount": 92000
+    },
+    {
+      "from": "2026-04-01",
+      "monthlyAmount": 105000
+    }
+  ],
+  "expenseHistory": [
+    {
+      "from": "2025-01-01",
+      "monthlyAmount": 14500
+    },
+    {
+      "from": "2025-09-01",
+      "monthlyAmount": 16200
+    },
+    {
+      "from": "2026-02-01",
+      "monthlyAmount": 17800
+    }
+  ],
+  "goals": [
+    {
+      "id": "goal-emergency-fund",
+      "name": "Emergency fund to six months",
+      "type": "milestone",
+      "targetAmount": 300000,
+      "targetDate": "2026-12-31",
+      "createdAt": "2025-01-05T09:00:00Z",
+      "updatedAt": "2025-03-31T09:00:00Z"
+    },
+    {
+      "id": "goal-macbook",
+      "name": "New MacBook Pro",
+      "type": "milestone",
+      "targetAmount": 190000,
+      "targetDate": "2026-06-30",
+      "createdAt": "2025-02-01T09:00:00Z",
+      "updatedAt": "2025-02-01T09:00:00Z"
+    },
+    {
+      "id": "goal-japan-trip",
+      "name": "Japan trip fund",
+      "type": "long-term",
+      "targetAmount": 450000,
+      "targetDate": "2027-03-31",
+      "createdAt": "2025-03-01T09:00:00Z",
+      "updatedAt": "2025-03-01T09:00:00Z"
+    },
+    {
+      "id": "goal-home-seed",
+      "name": "Home down-payment seed",
+      "type": "long-term",
+      "targetAmount": 1500000,
+      "createdAt": "2025-03-01T09:00:00Z",
+      "updatedAt": "2025-03-01T09:00:00Z"
+    }
+  ],
+  "settings": {
+    "profileName": "",
+    "appearance": "auto",
+    "numberFormat": "indian",
+    "defaultLandingPage": "dashboard",
+    "hideAmountsByDefault": false,
+    "autoHideOnBlur": false,
+    "reminderDayOfMonth": 1,
+    "expectedMarketReturn": null,
+    "showZeroReturnScenario": true,
+    "emergencyFundTargetMonths": 6
+  },
+  "preferences": {
+    "version": 2,
+    "notifications": {}
+  }
+}
