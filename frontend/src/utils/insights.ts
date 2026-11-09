@@ -1,14 +1,7 @@
 import type { Entry, RangeKey } from "../lib/types";
 import { ASSET_KEYS } from "./config";
-
-const RANGE_MONTHS: Partial<Record<RangeKey, number>> = {
-  "1M": 1,
-  "3M": 3,
-  "6M": 6,
-  "1Y": 12,
-  "3Y": 36,
-  "5Y": 60
-};
+import { getRangeCutoff } from "./period";
+export { getRangeCutoff, selectPeriod } from "./period";
 
 export interface SnapshotTotals {
   netWorth: number;
@@ -16,13 +9,6 @@ export interface SnapshotTotals {
   unrealizedGain: number;
   marketValue: number;
   liquidBuffer: number;
-}
-
-export interface PeriodSelection {
-  entries: Entry[];
-  anchor: Entry | null;
-  latest: Entry | null;
-  cutoff: string | null;
 }
 
 export function getSnapshotTotals(entry: Entry): SnapshotTotals {
@@ -39,34 +25,6 @@ export function getSnapshotTotals(entry: Entry): SnapshotTotals {
     marketValue,
     liquidBuffer: entry.liquid.bank + entry.liquid.sodexo
   };
-}
-
-export function getRangeCutoff(latestDate: string, range: RangeKey): string | null {
-  const months = RANGE_MONTHS[range];
-  if (!months) return null;
-
-  const [year, month, day] = latestDate.split("-").map(Number);
-  const targetMonth = new Date(Date.UTC(year, month - 1 - months, 1));
-  const targetYear = targetMonth.getUTCFullYear();
-  const targetMonthIndex = targetMonth.getUTCMonth();
-  const lastDay = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate();
-  return `${targetYear}-${String(targetMonthIndex + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
-}
-
-export function selectPeriod(entries: Entry[], range: RangeKey): PeriodSelection {
-  const ordered = [...entries].sort((a, b) => a.date.localeCompare(b.date));
-  const latest = ordered[ordered.length - 1] ?? null;
-  if (!latest) return { entries: [], anchor: null, latest: null, cutoff: null };
-
-  const cutoff = getRangeCutoff(latest.date, range);
-  if (!cutoff) return { entries: ordered, anchor: ordered[0] ?? null, latest, cutoff: null };
-
-  const visible = ordered.filter((entry) => entry.date >= cutoff);
-  const anchor = [...ordered].reverse().find((entry) => entry.date <= cutoff) ?? visible[0] ?? ordered[0] ?? null;
-  const withAnchor = anchor && !visible.some((entry) => entry.id === anchor.id)
-    ? [anchor, ...visible]
-    : visible;
-  return { entries: withAnchor, anchor, latest, cutoff };
 }
 
 export function getRecentCapitalPace(entries: Entry[]) {
@@ -90,6 +48,27 @@ export function getRecentCapitalPace(entries: Entry[]) {
     latest,
     elapsedDays
   };
+}
+
+export function getEffectiveMonthlyAmount(history: Array<{ from: string; monthlyAmount: number }>, date: string) {
+  return [...history].sort((a, b) => a.from.localeCompare(b.from)).filter((item) => item.from <= date).at(-1)?.monthlyAmount ?? null;
+}
+
+export function getRegularCapitalPace(entries: Entry[], months = 6) {
+  const ordered = [...entries].sort((a, b) => a.date.localeCompare(b.date));
+  const latest = ordered.at(-1);
+  if (!latest || ordered.length < 2) return null;
+  const range: RangeKey = months <= 6 ? "6M" : months <= 12 ? "1Y" : months <= 36 ? "3Y" : "ALL";
+  const cutoff = range === "ALL" ? null : getRangeCutoff(latest.date, range);
+  const anchor = (cutoff ? [...ordered].reverse().find((entry) => entry.date <= cutoff) : null) ?? ordered[0];
+  if (anchor.id === latest.id) return null;
+  const elapsedDays = (Date.parse(`${latest.date}T00:00:00Z`) - Date.parse(`${anchor.date}T00:00:00Z`)) / 86_400_000;
+  if (elapsedDays < 30) return null;
+  const oneOffAdjustment = ordered.filter((entry) => entry.date > anchor.date && entry.date <= latest.date)
+    .flatMap((entry) => entry.oneOffs ?? [])
+    .reduce((sum, item) => sum + (item.type === "inflow" ? item.amount : -item.amount), 0);
+  const regularChange = getSnapshotTotals(latest).hardCapital - getSnapshotTotals(anchor).hardCapital - oneOffAdjustment;
+  return { amountPerMonth: regularChange / (elapsedDays / 30.4375), regularChange, anchor, latest, elapsedDays, oneOffAdjustment };
 }
 
 export function getPeakDrawdown(entries: Entry[]) {

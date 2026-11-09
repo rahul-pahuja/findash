@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Entry } from "../lib/types";
 import { ASSET_KEYS, ASSET_LABELS } from "../utils/config";
 import { formatCurrency, formatDateLabel, formatSigned, formatSignedPercent } from "../utils/format";
+import { FormInput, SegmentedControl } from "./FormControls";
 
 interface Props {
   open: boolean;
@@ -24,7 +25,6 @@ function localToday() {
 const emptyEntry = (): Entry => ({
   id: "",
   date: localToday(),
-  income: { in_hand: null },
   liquid: { bank: 0, sodexo: 0 },
   hard_assets: { stocks_wallet: 0, fd: 0 },
   market_assets: {
@@ -33,12 +33,7 @@ const emptyEntry = (): Entry => ({
     stock_market: { invested: 0, current: 0 },
     crypto: { invested: 0, current: 0 }
   },
-  sip: {
-    mutual_funds: null,
-    nps: null,
-    stock_market: null,
-    crypto: null
-  },
+  oneOffs: [],
   expenses_note: ""
 });
 
@@ -73,6 +68,11 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   const [draft, setDraft] = useState<Entry>(emptyEntry());
   const [noteOpen, setNoteOpen] = useState(false);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
+  const [oneOffLabel, setOneOffLabel] = useState("");
+  const [oneOffAmount, setOneOffAmount] = useState("");
+  const [oneOffType, setOneOffType] = useState<"inflow" | "outflow">("inflow");
+  const [oneOffOpen, setOneOffOpen] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLElement>(null);
   const initialDraftRef = useRef<string>("");
   const dirtyRef = useRef(false);
@@ -85,6 +85,8 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
     dirtyRef.current = false;
     setNoteOpen(Boolean(entry?.expenses_note));
     setEditingAmounts({});
+    setOneOffLabel(""); setOneOffAmount(""); setOneOffType("inflow");
+    setOneOffOpen(false);
   }, [entry, initialDate, open, entries]);
 
   useEffect(() => {
@@ -195,6 +197,12 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
     onSave({ ...draft, id: draft.date });
     onClose();
   };
+  const addOneOff = () => {
+    const amount = Number(oneOffAmount.replace(/,/g, ""));
+    if (!oneOffLabel.trim() || !Number.isFinite(amount) || amount <= 0) return;
+    setDraft((current) => ({ ...current, oneOffs: [...(current.oneOffs ?? []), { id: crypto.randomUUID(), type: oneOffType, amount, label: oneOffLabel.trim() }] }));
+    setOneOffLabel(""); setOneOffAmount("");
+  };
   const cancelDraft = () => {
     if (dirtyRef.current && !window.confirm("Discard your unsaved snapshot changes?")) return;
     onClose();
@@ -237,10 +245,26 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
           </section>
 
           <div className="snapshot-date-panel">
-            <label className="snapshot-date-control" htmlFor="snapshot-date">
+            <div className="snapshot-date-control-wrap">
+            <button type="button" className="snapshot-date-control" onClick={() => {
+              const input = dateInputRef.current;
+              if (!input) return;
+              try {
+                if (typeof input.showPicker === "function") input.showPicker();
+                else { input.focus(); input.click(); }
+              } catch {
+                input.focus();
+                input.click();
+              }
+            }} aria-label={`Change snapshot date, currently ${formattedDate}`}>
               <span>{!entry && isToday ? `Today, ${formattedDate}` : formattedDate}</span>
-              <input id="snapshot-date" type="date" value={draft.date} aria-label="Snapshot date" onChange={(event) => handleBase("date", event.target.value)} />
-            </label>
+              <span className="snapshot-date-chevron" aria-hidden="true">⌄</span>
+            </button>
+            <input ref={dateInputRef} id="snapshot-date" className="snapshot-date-input" type="date" value={draft.date} aria-label="Snapshot date" tabIndex={-1} onClick={(event) => {
+              const input = event.currentTarget;
+              try { if (typeof input.showPicker === "function") input.showPicker(); } catch { /* Native click remains the fallback. */ }
+            }} onChange={(event) => handleBase("date", event.target.value)} />
+            </div>
           </div>
 
           <section className="snapshot-editor-section" aria-labelledby="snapshot-balances-heading">
@@ -289,6 +313,18 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
                 );
               })}
             </div>
+          </section>
+
+          <section className="snapshot-editor-section one-off-section" aria-labelledby="one-off-heading">
+            <div className="snapshot-editor-section-heading"><div><h3 id="one-off-heading">One-off cash events</h3><p>Bonuses, trips, big purchases. Recurring income and spending live in Plan.</p></div></div>
+            {draft.oneOffs?.length ? <div className="one-off-list">{draft.oneOffs.map((item) => <div key={item.id}><span className={`one-off-type is-${item.type}`}>{item.type === "inflow" ? "In" : "Out"}</span><strong>{item.label}</strong><span>{masked ? "₹ ••••" : formatCurrency(item.amount, false)}</span><button type="button" aria-label={`Remove ${item.label}`} onClick={() => setDraft((current) => ({ ...current, oneOffs: current.oneOffs.filter((event) => event.id !== item.id) }))}>×</button></div>)}</div> : null}
+            <button type="button" className="one-off-toggle" aria-expanded={oneOffOpen} onClick={() => setOneOffOpen((open) => !open)}><span>{oneOffOpen ? "− Add one-off in/out" : "+ Add one-off in/out"}</span><i aria-hidden="true">{oneOffOpen ? "⌃" : "›"}</i></button>
+            {oneOffOpen ? <div className="one-off-add-row">
+              <SegmentedControl ariaLabel="Cash event direction" value={oneOffType} onChange={setOneOffType} className="one-off-direction" options={[{ value: "inflow", label: "Inflow" }, { value: "outflow", label: "Outflow" }]} />
+              <FormInput aria-label="Cash event label" value={oneOffLabel} onChange={(event) => setOneOffLabel(event.target.value)} placeholder="Bonus, travel, medical…" />
+              <FormInput aria-label="Cash event amount" type="number" min="1" inputMode="decimal" value={oneOffAmount} onChange={(event) => setOneOffAmount(event.target.value)} placeholder="Amount in ₹" />
+              <button type="button" className="primary-action" onClick={addOneOff}>Add event</button>
+            </div> : null}
           </section>
 
           <section className="snapshot-note-section" aria-labelledby="snapshot-notes-heading">

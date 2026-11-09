@@ -21,10 +21,10 @@ func TestComputeXirrProducesPerAssetData(t *testing.T) {
 func TestComputeDerivedRangeFiltering(t *testing.T) {
 	data := store.NewSampleDataset()
 	filtered := FilterEntries(data.Entries, "1M")
-	if len(filtered) != 1 {
-		t.Fatalf("expected 1 entry for 1M, got %d", len(filtered))
+	if len(filtered) != 2 {
+		t.Fatalf("expected the cutoff snapshot and the latest snapshot in the exact 1M window, got %d", len(filtered))
 	}
-	if filtered[0].ID != "2025-03-31" {
-		t.Fatalf("expected latest entry, got %s", filtered[0].ID)
+	if filtered[0].ID != "2025-02-28" || filtered[1].ID != "2025-03-31" {
+		t.Fatalf("expected cutoff day and latest snapshot; got %v", []string{filtered[0].ID, filtered[1].ID})
 	}
 }

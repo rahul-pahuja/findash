@@ -2,7 +2,6 @@ package calc
 
 import (
 	"fmt"
-	"math"
 	"time"
 
 	"financial-dashboard/store"
@@ -25,13 +24,6 @@ type DerivedMetric struct {
 	LiquidBuffer        float64            `json:"liquidBuffer"`
 	MarketExposure      float64            `json:"marketExposure"`
 	NetWorthAddition    *float64           `json:"netWorthAddition"`
-	LiquidBufferRatio   *float64           `json:"liquidBufferRatio"`
-	CapitalAddedRate    *float64           `json:"capitalAddedRate"`
-	InvestmentVelocity  *float64           `json:"investmentVelocity"`
-	IncomeEstimated     bool               `json:"incomeEstimated"`
-	TotalSIP            float64            `json:"totalSip"`
-	SIPByAsset          map[string]float64 `json:"sipByAsset"`
-	ContributionDelta   map[string]float64 `json:"contributionDelta"`
 	AllocationByAsset   map[string]float64 `json:"allocationByAsset"`
 	MonthLabel          string             `json:"monthLabel"`
 	VisibleRangeKey     string             `json:"visibleRangeKey,omitempty"`
@@ -45,7 +37,6 @@ type SummaryMetric struct {
 	LatestNetWorth     float64            `json:"latestNetWorth"`
 	LatestHardCapital  float64            `json:"latestHardCapital"`
 	LatestLiquidBuffer float64            `json:"latestLiquidBuffer"`
-	LatestIncome       *float64           `json:"latestIncome"`
 	AllocationByAsset  map[string]float64 `json:"allocationByAsset"`
 	TotalUnrealized    float64            `json:"totalUnrealized"`
 }
@@ -88,20 +79,17 @@ func stringsUpper(v string) string {
 func ComputeDerived(data store.Dataset) map[string]DerivedMetric {
 	derived := map[string]DerivedMetric{}
 	var previous *DerivedMetric
-	var previousEntry *store.Entry
 
-	for i, entry := range data.Entries {
+	for _, entry := range data.Entries {
 		hardCapital := entry.Liquid.Bank + entry.Liquid.Sodexo + entry.HardAssets.StocksWallet + entry.HardAssets.FD
 		currentNetWorth := hardCapital
 		marketExposure := 0.0
-		totalInvested := 0.0
 		allocation := map[string]float64{}
 		for _, asset := range store.CanonicalAssetOrder() {
 			value := entry.MarketAssets[asset]
 			hardCapital += value.Invested
 			currentNetWorth += value.Current
 			marketExposure += value.Current
-			totalInvested += value.Invested
 		}
 		for _, asset := range store.CanonicalAssetOrder() {
 			value := entry.MarketAssets[asset]
@@ -121,51 +109,16 @@ func ComputeDerived(data store.Dataset) map[string]DerivedMetric {
 			UnrealizedGain:    currentNetWorth - hardCapital,
 			LiquidBuffer:      entry.Liquid.Bank + entry.Liquid.Sodexo,
 			MarketExposure:    marketExposure,
-			SIPByAsset:        map[string]float64{},
-			ContributionDelta: map[string]float64{},
 			AllocationByAsset: allocation,
 			MonthLabel:        entry.ID,
-		}
-		for _, asset := range store.CanonicalAssetOrder() {
-			sip := derefFloat(entry.SIP[asset])
-			metric.SIPByAsset[asset] = sip
-			metric.TotalSIP += sip
-			if previousEntry != nil {
-				metric.ContributionDelta[asset] = entry.MarketAssets[asset].Invested - previousEntry.MarketAssets[asset].Invested - sip
-			} else {
-				metric.ContributionDelta[asset] = entry.MarketAssets[asset].Invested - sip
-			}
 		}
 
 		if previous != nil {
 			delta := metric.CurrentNetWorth - previous.CurrentNetWorth
 			metric.NetWorthAddition = &delta
 		}
-		if entry.Income.InHand != nil && *entry.Income.InHand > 0 {
-			ratio := metric.LiquidBuffer / *entry.Income.InHand
-			metric.LiquidBufferRatio = &ratio
-			capitalAdded := metric.TotalSIP + max(0, metric.LiquidBuffer-(func() float64 {
-				if previous != nil {
-					return previous.LiquidBuffer
-				}
-				return 0
-			})())
-			rate := capitalAdded / *entry.Income.InHand
-			velocity := metric.TotalSIP / *entry.Income.InHand
-			metric.CapitalAddedRate = &rate
-			metric.InvestmentVelocity = &velocity
-		}
-		if entry.Income.InHand == nil {
-			metric.IncomeEstimated = true
-		}
-
-		if i == len(data.Entries)-1 {
-			metric.LatestVisibleRecord = true
-		}
-
 		derived[entry.ID] = metric
 		previous = &metric
-		previousEntry = &data.Entries[i]
 	}
 	return derived
 }
@@ -173,12 +126,43 @@ func ComputeDerived(data store.Dataset) map[string]DerivedMetric {
 func FilterEntries(entries []store.Entry, key string) []store.Entry {
 	key = NormalizeRangeKey(key)
 	months := RangeMonths[key]
-	if months == 0 || len(entries) <= months {
+	if months == 0 || len(entries) == 0 {
 		out := make([]store.Entry, len(entries))
 		copy(out, entries)
 		return out
 	}
-	return append([]store.Entry(nil), entries[len(entries)-months:]...)
+	latest, err := time.Parse("2006-01-02", entries[len(entries)-1].Date)
+	if err != nil {
+		return append([]store.Entry(nil), entries...)
+	}
+	monthStart := time.Date(latest.Year(), latest.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -months, 0)
+	lastDay := time.Date(monthStart.Year(), monthStart.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	day := latest.Day()
+	if day > lastDay {
+		day = lastDay
+	}
+	cutoff := time.Date(monthStart.Year(), monthStart.Month(), day, 0, 0, 0, 0, time.UTC)
+	anchorIndex := -1
+	firstAfter := -1
+	for i, entry := range entries {
+		date, parseErr := time.Parse("2006-01-02", entry.Date)
+		if parseErr != nil {
+			continue
+		}
+		if date.After(cutoff) {
+			firstAfter = i
+			break
+		}
+		anchorIndex = i
+	}
+	start := anchorIndex
+	if start < 0 {
+		start = firstAfter
+	}
+	if start < 0 {
+		start = len(entries) - 1
+	}
+	return append([]store.Entry(nil), entries[start:]...)
 }
 
 func BuildDataResponse(data store.Dataset, rangeKey string, sync store.SyncMetadata) DataResponse {
@@ -200,7 +184,6 @@ func BuildDataResponse(data store.Dataset, rangeKey string, sync store.SyncMetad
 		summary.LatestNetWorth = lastDerived.CurrentNetWorth
 		summary.LatestHardCapital = lastDerived.HardCapital
 		summary.LatestLiquidBuffer = lastDerived.LiquidBuffer
-		summary.LatestIncome = latest.Income.InHand
 		summary.AllocationByAsset = lastDerived.AllocationByAsset
 		summary.TotalUnrealized = lastDerived.UnrealizedGain
 	}
@@ -237,17 +220,6 @@ func rangeLabel(key string) string {
 func ParseDate(value string) time.Time {
 	t, _ := time.Parse("2006-01-02", value)
 	return t
-}
-
-func derefFloat(value *float64) float64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func max(a, b float64) float64 {
-	return math.Max(a, b)
 }
 
 func RangeWindow(entries []store.Entry, key string) (time.Time, time.Time, error) {

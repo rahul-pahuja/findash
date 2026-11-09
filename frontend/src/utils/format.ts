@@ -1,7 +1,15 @@
+let numberLocale: "en-IN" | "en-US" = "en-IN";
+let numberStyle: "indian" | "international" = "indian";
+
+export function setNumberFormatPreference(preference: "indian" | "international") {
+  numberStyle = preference;
+  numberLocale = preference === "indian" ? "en-IN" : "en-US";
+}
+
 export function formatCurrency(value: number | null | undefined, masked: boolean) {
   if (value === null || value === undefined) return "N/A";
   if (masked) return "₹ ••••";
-  const formatter = new Intl.NumberFormat("en-IN", {
+  const formatter = new Intl.NumberFormat(numberLocale, {
     style: "currency",
     currency: "INR",
     maximumFractionDigits: 0
@@ -29,7 +37,12 @@ export function getCompactCurrencyParts(value: number | null | undefined, masked
 
   const absoluteValue = Math.abs(value);
   const sign = value < 0 ? "−" : "";
-  const compactFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+  const compactFormat = new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 2 });
+  if (numberStyle === "international") {
+    if (absoluteValue >= 1_000_000) return { amount: `${sign}₹${compactFormat.format(absoluteValue / 1_000_000)}`, unit: "M" };
+    if (absoluteValue >= 1_000) return { amount: `${sign}₹${compactFormat.format(absoluteValue / 1_000)}`, unit: "K" };
+    return { amount: `${sign}${formatCurrency(absoluteValue, false)}`, unit: null };
+  }
   if (absoluteValue >= 10_000_000) return { amount: `${sign}₹${compactFormat.format(absoluteValue / 10_000_000)}`, unit: "Cr" };
   if (absoluteValue >= 100_000) return { amount: `${sign}₹${compactFormat.format(absoluteValue / 100_000)}`, unit: "L" };
   return { amount: `${sign}${formatCurrency(absoluteValue, false)}`, unit: null };

@@ -12,15 +12,22 @@ import (
 	"time"
 )
 
+const CurrentSchemaVersion = 2
+
 var (
 	ErrInvalidDataset = errors.New("invalid dataset")
 	assetOrder        = []string{"mutual_funds", "nps", "stock_market", "crypto"}
 )
 
 type Dataset struct {
-	Entries     []Entry         `json:"entries"`
-	Meta        Meta            `json:"meta"`
-	Preferences json.RawMessage `json:"preferences,omitempty"`
+	SchemaVersion  int                    `json:"schemaVersion"`
+	Entries        []Entry                `json:"entries"`
+	Meta           Meta                   `json:"meta"`
+	IncomeHistory  []EffectiveDatedAmount `json:"incomeHistory"`
+	ExpenseHistory []EffectiveDatedAmount `json:"expenseHistory"`
+	Goals          []Goal                 `json:"goals"`
+	Settings       UserSettings           `json:"settings"`
+	Preferences    json.RawMessage        `json:"preferences,omitempty"`
 }
 
 type Meta struct {
@@ -32,16 +39,45 @@ type Meta struct {
 type Entry struct {
 	ID           string                 `json:"id"`
 	Date         string                 `json:"date"`
-	Income       Income                 `json:"income"`
 	Liquid       LiquidAssets           `json:"liquid"`
 	HardAssets   HardAssets             `json:"hard_assets"`
 	MarketAssets map[string]MarketAsset `json:"market_assets"`
-	SIP          map[string]*float64    `json:"sip,omitempty"`
+	OneOffs      []OneOff               `json:"oneOffs"`
 	ExpensesNote string                 `json:"expenses_note"`
 }
 
-type Income struct {
-	InHand *float64 `json:"in_hand"`
+type EffectiveDatedAmount struct {
+	From          string  `json:"from"`
+	MonthlyAmount float64 `json:"monthlyAmount"`
+}
+
+type Goal struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	Type         string  `json:"type"`
+	TargetAmount float64 `json:"targetAmount"`
+	TargetDate   string  `json:"targetDate,omitempty"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
+}
+
+type OneOff struct {
+	ID     string  `json:"id"`
+	Type   string  `json:"type"`
+	Amount float64 `json:"amount"`
+	Label  string  `json:"label"`
+}
+
+type UserSettings struct {
+	ProfileName               string   `json:"profileName"`
+	Appearance                string   `json:"appearance"`
+	NumberFormat              string   `json:"numberFormat"`
+	DefaultLandingPage        string   `json:"defaultLandingPage"`
+	HideAmountsByDefault      bool     `json:"hideAmountsByDefault"`
+	AutoHideOnBlur            bool     `json:"autoHideOnBlur"`
+	ReminderDayOfMonth        int      `json:"reminderDayOfMonth"`
+	ExpectedMarketReturn      *float64 `json:"expectedMarketReturn"`
+	EmergencyFundTargetMonths int      `json:"emergencyFundTargetMonths"`
 }
 
 type LiquidAssets struct {
@@ -68,6 +104,7 @@ type SyncMetadata struct {
 func NewSampleDataset() Dataset {
 	var data Dataset
 	_ = json.Unmarshal([]byte(sampleData), &data)
+	_ = MigrateDataset(&data)
 	return data
 }
 
@@ -88,6 +125,9 @@ func LoadDataset(path string) (Dataset, error) {
 
 	var data Dataset
 	if err := json.Unmarshal(raw, &data); err != nil {
+		return Dataset{}, err
+	}
+	if err := MigrateDataset(&data); err != nil {
 		return Dataset{}, err
 	}
 	if err := ValidateDataset(&data); err != nil {
@@ -153,6 +193,24 @@ func SyncInfo(path string) SyncMetadata {
 }
 
 func ValidateDataset(data *Dataset) error {
+	if err := MigrateDataset(data); err != nil {
+		return err
+	}
+	if data.Settings.Appearance != "light" && data.Settings.Appearance != "dark" && data.Settings.Appearance != "auto" {
+		return fmt.Errorf("%w: invalid appearance setting", ErrInvalidDataset)
+	}
+	if data.Settings.NumberFormat != "indian" && data.Settings.NumberFormat != "international" {
+		return fmt.Errorf("%w: invalid number format setting", ErrInvalidDataset)
+	}
+	if data.Settings.DefaultLandingPage != "dashboard" && data.Settings.DefaultLandingPage != "snapshots" && data.Settings.DefaultLandingPage != "analytics-overview" && data.Settings.DefaultLandingPage != "plan" {
+		return fmt.Errorf("%w: invalid default landing page", ErrInvalidDataset)
+	}
+	if data.Settings.ReminderDayOfMonth < 1 || data.Settings.ReminderDayOfMonth > 28 || data.Settings.EmergencyFundTargetMonths < 1 {
+		return fmt.Errorf("%w: reminder day must be 1-28 and emergency fund months must be positive", ErrInvalidDataset)
+	}
+	if data.Settings.ExpectedMarketReturn != nil && *data.Settings.ExpectedMarketReturn <= -1 {
+		return fmt.Errorf("%w: expected market return must be greater than -100%%", ErrInvalidDataset)
+	}
 	if data.Meta.Currency == "" {
 		data.Meta.Currency = "INR"
 	}
@@ -160,6 +218,7 @@ func ValidateDataset(data *Dataset) error {
 		return fmt.Errorf("%w: dataset must contain at least one entry", ErrInvalidDataset)
 	}
 
+	seenEntries := map[string]bool{}
 	for i := range data.Entries {
 		entry := &data.Entries[i]
 		_, err := time.Parse("2006-01-02", entry.Date)
@@ -170,6 +229,10 @@ func ValidateDataset(data *Dataset) error {
 		if entry.ID != expectedID {
 			return fmt.Errorf("%w: id %s must match date %s", ErrInvalidDataset, entry.ID, expectedID)
 		}
+		if seenEntries[entry.ID] {
+			return fmt.Errorf("%w: duplicate snapshot date %s", ErrInvalidDataset, entry.Date)
+		}
+		seenEntries[entry.ID] = true
 		if entry.MarketAssets == nil {
 			entry.MarketAssets = map[string]MarketAsset{}
 		}
@@ -183,14 +246,129 @@ func ValidateDataset(data *Dataset) error {
 				return fmt.Errorf("%w: market assets cannot be negative", ErrInvalidDataset)
 			}
 		}
-		if entry.SIP == nil {
-			entry.SIP = map[string]*float64{}
+		seenOneOffs := map[string]bool{}
+		for _, oneOff := range entry.OneOffs {
+			if oneOff.Type != "inflow" && oneOff.Type != "outflow" {
+				return fmt.Errorf("%w: one-off type must be inflow or outflow", ErrInvalidDataset)
+			}
+			if oneOff.Amount <= 0 || strings.TrimSpace(oneOff.Label) == "" {
+				return fmt.Errorf("%w: one-offs need a positive amount and label", ErrInvalidDataset)
+			}
+			if oneOff.ID == "" || seenOneOffs[oneOff.ID] {
+				return fmt.Errorf("%w: one-off IDs must be present and unique per snapshot", ErrInvalidDataset)
+			}
+			seenOneOffs[oneOff.ID] = true
 		}
-		for key, value := range entry.SIP {
-			if value != nil && *value < 0 {
-				return fmt.Errorf("%w: sip for %s cannot be negative", ErrInvalidDataset, key)
+	}
+	for _, history := range [][]EffectiveDatedAmount{data.IncomeHistory, data.ExpenseHistory} {
+		seen := map[string]bool{}
+		for _, item := range history {
+			if _, err := time.Parse("2006-01-02", item.From); err != nil || item.MonthlyAmount < 0 || seen[item.From] {
+				return fmt.Errorf("%w: invalid or duplicate effective-dated monthly amount", ErrInvalidDataset)
+			}
+			seen[item.From] = true
+		}
+	}
+	seenGoals := map[string]bool{}
+	for _, goal := range data.Goals {
+		if strings.TrimSpace(goal.ID) == "" || seenGoals[goal.ID] || strings.TrimSpace(goal.Name) == "" || goal.TargetAmount <= 0 || (goal.Type != "milestone" && goal.Type != "long-term") || goal.CreatedAt == "" || goal.UpdatedAt == "" {
+			return fmt.Errorf("%w: goals need a name, type, and positive target", ErrInvalidDataset)
+		}
+		seenGoals[goal.ID] = true
+		if goal.TargetDate != "" {
+			if _, err := time.Parse("2006-01-02", goal.TargetDate); err != nil {
+				return fmt.Errorf("%w: invalid goal target date", ErrInvalidDataset)
 			}
 		}
+	}
+	sort.Slice(data.IncomeHistory, func(i, j int) bool { return data.IncomeHistory[i].From < data.IncomeHistory[j].From })
+	sort.Slice(data.ExpenseHistory, func(i, j int) bool { return data.ExpenseHistory[i].From < data.ExpenseHistory[j].From })
+	sortEntries(data.Entries)
+	return nil
+}
+
+func MigrateDataset(data *Dataset) error {
+	if data.SchemaVersion > CurrentSchemaVersion {
+		return fmt.Errorf("%w: schema version %d is newer than this app supports", ErrInvalidDataset, data.SchemaVersion)
+	}
+	if data.SchemaVersion < 2 {
+		var legacy struct {
+			ShortTermGoal *struct {
+				TargetAmount float64 `json:"targetAmount"`
+				TargetDate   string  `json:"targetDate"`
+				CreatedAt    string  `json:"createdAt"`
+				UpdatedAt    string  `json:"updatedAt"`
+			} `json:"shortTermGoal"`
+			Notifications json.RawMessage `json:"notifications"`
+		}
+		if len(data.Preferences) > 0 {
+			if err := json.Unmarshal(data.Preferences, &legacy); err != nil {
+				return fmt.Errorf("%w: could not migrate legacy preferences", ErrInvalidDataset)
+			}
+		}
+		if len(data.Goals) == 0 && legacy.ShortTermGoal != nil && legacy.ShortTermGoal.TargetAmount > 0 {
+			createdAt := legacy.ShortTermGoal.CreatedAt
+			if createdAt == "" {
+				createdAt = time.Now().UTC().Format(time.RFC3339)
+			}
+			updatedAt := legacy.ShortTermGoal.UpdatedAt
+			if updatedAt == "" {
+				updatedAt = createdAt
+			}
+			data.Goals = []Goal{{
+				ID: "migrated-short-term-target", Name: "Short-term target", Type: "milestone",
+				TargetAmount: legacy.ShortTermGoal.TargetAmount, TargetDate: legacy.ShortTermGoal.TargetDate,
+				CreatedAt: createdAt, UpdatedAt: updatedAt,
+			}}
+		}
+		preferences := map[string]any{"version": 2}
+		if len(legacy.Notifications) > 0 && string(legacy.Notifications) != "null" {
+			preferences["notifications"] = legacy.Notifications
+		}
+		migratedPreferences, err := json.Marshal(preferences)
+		if err != nil {
+			return err
+		}
+		data.Preferences = migratedPreferences
+		data.SchemaVersion = CurrentSchemaVersion
+	}
+	if data.SchemaVersion == 0 {
+		data.SchemaVersion = CurrentSchemaVersion
+	}
+	if len(data.Preferences) == 0 || string(data.Preferences) == "null" {
+		data.Preferences = json.RawMessage(`{"version":2,"notifications":{}}`)
+	}
+	if data.Entries == nil {
+		data.Entries = []Entry{}
+	}
+	for i := range data.Entries {
+		if data.Entries[i].OneOffs == nil {
+			data.Entries[i].OneOffs = []OneOff{}
+		}
+	}
+	if data.IncomeHistory == nil {
+		data.IncomeHistory = []EffectiveDatedAmount{}
+	}
+	if data.ExpenseHistory == nil {
+		data.ExpenseHistory = []EffectiveDatedAmount{}
+	}
+	if data.Goals == nil {
+		data.Goals = []Goal{}
+	}
+	if data.Settings.Appearance == "" {
+		data.Settings.Appearance = "auto"
+	}
+	if data.Settings.NumberFormat == "" {
+		data.Settings.NumberFormat = "indian"
+	}
+	if data.Settings.DefaultLandingPage == "" {
+		data.Settings.DefaultLandingPage = "dashboard"
+	}
+	if data.Settings.ReminderDayOfMonth == 0 {
+		data.Settings.ReminderDayOfMonth = 1
+	}
+	if data.Settings.EmergencyFundTargetMonths == 0 {
+		data.Settings.EmergencyFundTargetMonths = 6
 	}
 	return nil
 }
@@ -208,11 +386,11 @@ func sortEntries(entries []Entry) {
 }
 
 const sampleData = `{
+  "schemaVersion": 2,
   "entries": [
     {
       "id": "2025-01-31",
       "date": "2025-01-31",
-      "income": { "in_hand": 85000 },
       "liquid": { "bank": 42000, "sodexo": 3500 },
       "hard_assets": { "stocks_wallet": 15000, "fd": 100000 },
       "market_assets": {
@@ -221,18 +399,11 @@ const sampleData = `{
         "stock_market": { "invested": 55000, "current": 53200 },
         "crypto": { "invested": 15000, "current": 16600 }
       },
-      "sip": {
-        "mutual_funds": 10000,
-        "nps": 5000,
-        "stock_market": 4000,
-        "crypto": 1000
-      },
       "expenses_note": "Start of year rebalance and annual subscriptions"
     },
     {
       "id": "2025-02-28",
       "date": "2025-02-28",
-      "income": { "in_hand": 86000 },
       "liquid": { "bank": 47000, "sodexo": 3200 },
       "hard_assets": { "stocks_wallet": 16000, "fd": 100000 },
       "market_assets": {
@@ -241,18 +412,11 @@ const sampleData = `{
         "stock_market": { "invested": 59000, "current": 57800 },
         "crypto": { "invested": 17000, "current": 19300 }
       },
-      "sip": {
-        "mutual_funds": 10000,
-        "nps": 5000,
-        "stock_market": 4000,
-        "crypto": 2000
-      },
       "expenses_note": "Travel month with slightly higher cash buffer"
     },
     {
       "id": "2025-03-31",
       "date": "2025-03-31",
-      "income": { "in_hand": 88000 },
       "liquid": { "bank": 52000, "sodexo": 3500 },
       "hard_assets": { "stocks_wallet": 15000, "fd": 100000 },
       "market_assets": {
@@ -261,16 +425,15 @@ const sampleData = `{
         "stock_market": { "invested": 60000, "current": 54200 },
         "crypto": { "invested": 20000, "current": 27400 }
       },
-      "sip": {
-        "mutual_funds": 10000,
-        "nps": 5000,
-        "stock_market": 1000,
-        "crypto": 3000
-      },
       "expenses_note": "Paid insurance premium"
     }
   ],
-  "meta": { "currency": "INR", "created": "2025-01-01", "last_updated": "2025-03-31" }
+  "meta": { "currency": "INR", "created": "2025-01-01", "last_updated": "2025-03-31" },
+  "incomeHistory": [],
+  "expenseHistory": [],
+  "goals": [],
+  "settings": { "profileName": "", "appearance": "auto", "numberFormat": "indian", "defaultLandingPage": "dashboard", "hideAmountsByDefault": false, "autoHideOnBlur": false, "reminderDayOfMonth": 1, "expectedMarketReturn": null, "emergencyFundTargetMonths": 6 },
+  "preferences": { "version": 2, "notifications": {} }
 }`
 
 func CompactJSON(data Dataset) string {

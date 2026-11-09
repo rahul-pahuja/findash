@@ -1,10 +1,13 @@
 import type { ChartData, ChartOptions, Plugin } from "chart.js";
 import { Chart as ChartJS, registerables } from "chart.js";
 import { Chart } from "react-chartjs-2";
-import type { DataResponse, Entry, RangeKey, XirrResponse } from "../lib/types";
+import type { DataResponse, Entry, XirrResponse } from "../lib/types";
+import type { AnalyticsPeriod } from "../utils/router";
+import { analyticsPeriodLabel } from "../utils/router";
 import { InfoTooltip } from "./InfoTooltip";
 import { CompactCurrency } from "./CompactCurrency";
-import { RANGE_OPTIONS, ASSET_KEYS, ASSET_LABELS, getAssetPalette, getLiquidityPalette } from "../utils/config";
+import { SegmentedControl } from "./FormControls";
+import { ASSET_KEYS, ASSET_LABELS, getAssetPalette, getLiquidityPalette } from "../utils/config";
 import { formatChartMonth, formatCompactCurrency, formatCurrency, formatDateLabel, formatSigned, formatSignedPercent, getNiceAxisBounds } from "../utils/format";
 import { getSnapshotTotals, selectPeriod } from "../utils/insights";
 
@@ -16,20 +19,21 @@ interface Props {
   returnsLoading: boolean;
   masked: boolean;
   themeMode: "light" | "dark";
-  selectedRange: RangeKey;
-  onRangeChange: (range: RangeKey) => void;
+  period: AnalyticsPeriod;
+  section: "overview" | "investments";
+  onSectionChange: (section: "overview" | "investments") => void;
 }
 
 function fullDate(date: string) {
   return formatDateLabel(date);
 }
 
-export function AnalyticsDashboard({ response, returns, returnsLoading, masked, themeMode, selectedRange, onRangeChange }: Props) {
+export function AnalyticsDashboard({ response, returns, returnsLoading, masked, themeMode, period: selectedPeriod, section, onSectionChange }: Props) {
   const dataset = response?.dataset;
   const assetColors = getAssetPalette(themeMode);
   const liquidityColors = getLiquidityPalette(themeMode);
   const allEntries = dataset ? [...dataset.entries].sort((a, b) => a.date.localeCompare(b.date)) : [];
-  const period = selectPeriod(allEntries, selectedRange);
+  const period = selectPeriod(allEntries, selectedPeriod);
   const entries = period.entries;
   const anchor = period.anchor;
   const latest = period.latest;
@@ -129,35 +133,30 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
   const shortHistory = xirrStart && xirrEnd
     ? Date.parse(`${xirrEnd}T00:00:00`) - Date.parse(`${xirrStart}T00:00:00`) < 365 * 86_400_000
     : false;
-  const overallReturn = returns?.lifePortfolio.value ?? null;
+  const overallReturn = returns?.marketPortfolio.value ?? null;
   const rateCaveat = shortHistory || (overallReturn !== null && Math.abs(overallReturn) > 1);
-  const rangeLabel = RANGE_OPTIONS.find((option) => option.key === selectedRange)?.label ?? "All";
+  const rangeLabel = analyticsPeriodLabel(selectedPeriod);
 
   return (
     <div className="analytics-page page-enter">
-      <header className="analytics-page-heading">
-        <div><p className="section-eyebrow">{anchor ? `Since ${fullDate(anchor.date)}` : "Your full history"}</p><h1>Analytics</h1></div>
-        <div className="range-control" role="group" aria-label="Analytics date range">
-          {RANGE_OPTIONS.map((option) => <button key={option.key} type="button" className={`range-option${selectedRange === option.key ? " is-selected" : ""}`} aria-pressed={selectedRange === option.key} onClick={() => onRangeChange(option.key)}>{option.label}</button>)}
-        </div>
-      </header>
+      <SegmentedControl ariaLabel="Analytics sections" role="tablist" value={section} onChange={onSectionChange} className="analytics-tabs" options={[{ value: "overview", label: "Overview" }, { value: "investments", label: "Investments" }]} />
 
+      {section === "overview" ? <>
       <section className="analytics-hero" aria-labelledby="analytics-net-worth-title">
         <div className="analytics-hero-copy">
           <p className="micro-label" id="analytics-net-worth-title">Net worth · {latest ? fullDate(latest.date) : "No snapshot yet"}</p>
           <strong className="analytics-net-worth-value">{latestTotals ? <CompactCurrency value={latestTotals.netWorth} masked={masked} /> : "—"}</strong>
           {change !== null && anchor && latest && anchor.id !== latest.id ? (
             <p className={`analytics-change${change < 0 ? " is-negative" : ""}`}><strong>{formatSigned(change, masked)}{masked ? "" : ` (${changePercent === null ? "—" : formatSignedPercent(changePercent, false)})`}</strong><span> since {fullDate(anchor.date)}</span></p>
-          ) : <p className="analytics-change is-quiet">{latest ? "One recorded snapshot in this period" : "Add a snapshot to start tracking your wealth."}</p>}
-          {anchor && latest ? <div className="analytics-period-stats"><div><span>Start</span><strong>{fullDate(anchor.date)}</strong></div><div><span>End</span><strong>{fullDate(latest.date)}</strong></div><div><span>Change</span><strong>{formatSigned(change, masked)}</strong></div></div> : null}
+          ) : <p className="analytics-change is-quiet">{latest ? "One recorded snapshot in this period" : allEntries.length ? "No snapshots were recorded in these dates." : "Add a snapshot to start tracking your wealth."}</p>}
+          {anchor && latest ? <div className="analytics-period-stats"><div><span>Start</span><strong>{fullDate(anchor.date)}</strong></div><div><span>End</span><strong>{fullDate(latest.date)}</strong></div></div> : null}
         </div>
         <div className="analytics-period-chart" aria-label="Net worth over the selected period">
           {entries.length > 0 ? <Chart type="line" data={netWorthData} options={netWorthOptions} /> : <p className="chart-empty">No snapshots in this period.</p>}
         </div>
-        {anchor && latest ? <p className="analytics-period-footnote">Comparison uses {fullDate(anchor.date)} as the starting snapshot and {fullDate(latest.date)} as the latest.</p> : null}
       </section>
 
-      {anchor && latest && anchor.id !== latest.id ? <aside className="analytics-attribution"><span className="section-eyebrow">{rangeLabel === "All" ? "All time" : `Past ${rangeLabel}`}</span><p>Hard capital changed <strong>{formatSigned(hardCapitalChange, masked)}</strong>; unrealized gain changed <strong>{formatSigned(unrealizedChange, masked)}</strong>.</p></aside> : null}
+      {anchor && latest && anchor.id !== latest.id ? <aside className="analytics-attribution"><span className="section-eyebrow">{rangeLabel}</span><p>Hard capital changed <strong>{formatSigned(hardCapitalChange, masked)}</strong>; unrealized gain changed <strong>{formatSigned(unrealizedChange, masked)}</strong>.</p></aside> : null}
 
       <section className="analytics-two-column">
         <article className="ruled-panel" aria-labelledby="movement-heading">
@@ -191,7 +190,9 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
           ) : <p className="panel-empty">Add a snapshot to see available liquidity.</p>}
         </article>
       </section>
+      </> : null}
 
+      {section === "investments" ? <>
       <section className="ruled-panel performance-panel" aria-labelledby="returns-heading">
           <div className="performance-heading">
           <div className="section-heading"><div><h2 id="returns-heading">Investment performance</h2><p>Annualized return, weighted by when contributions were recorded.</p></div></div>
@@ -208,20 +209,21 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
               const shownReturn = displayedValue ?? totalSoFar;
               return <div className="return-row" key={asset}>
                 <div className="return-name"><span className="asset-color-dot" style={{ backgroundColor: assetColors[asset] }} /><strong>{ASSET_LABELS[asset]}</strong><small>{formatCompactCurrency(result.invested, masked)} → {formatCompactCurrency(result.current, masked)}</small></div>
-                <div className={`return-line${value === null ? " is-unannualized" : ""}`}><i />{value !== null ? <span style={{ width: `${Math.min(Math.abs(value * 100) / 30 * 50, 50)}%`, left: value < 0 ? `${50 - Math.min(Math.abs(value * 100) / 30 * 50, 50)}%` : "50%", backgroundColor: value < 0 ? "var(--negative)" : "var(--positive)" }} /> : null}</div>
+                {value !== null ? <div className="return-line"><i /><span style={{ width: `${Math.min(Math.abs(value * 100) / 30 * 50, 50)}%`, left: value < 0 ? `${50 - Math.min(Math.abs(value * 100) / 30 * 50, 50)}%` : "50%", backgroundColor: value < 0 ? "var(--negative)" : "var(--positive)" }} /></div> : <div className="return-line-unavailable" aria-label="Annualized return unavailable">—</div>}
                 <div className={`return-value${shownReturn !== null && shownReturn < 0 ? " is-negative" : ""}`}><strong>{formatReturn(shownReturn, masked)}</strong><small>{value !== null ? "per year" : totalSoFar !== null ? "total so far" : result.message}</small></div>
               </div>;
             })}
           </div>
-        ) : <p className="panel-empty">Returns are unavailable for this period.</p>}
+        ) : <p className="panel-empty">{entries.length < 2 ? "Add another snapshot in this period to calculate money-weighted returns." : "Returns are unavailable for this period."}</p>}
         <div className="performance-footer"><span>Overall return <strong className={rateCaveat ? "is-caveated" : ""}>{formatReturn(overallReturn, masked)}</strong> a year</span>{rateCaveat ? <p className="return-caveat">Short histories or rates above 100% can exaggerate yearly returns. Treat this as a rough guide.</p> : null}</div>
       </section>
 
       <section className="ruled-panel asset-trends-panel" aria-labelledby="asset-trends-heading">
         <div className="section-heading"><div><h2 id="asset-trends-heading">Unrealized gain / loss by asset</h2><p>Current value minus invested principal at each snapshot.</p></div></div>
         {entries.length > 0 ? <div className="asset-trend-grid">{ASSET_KEYS.map((asset) => <AssetTrend key={asset} asset={asset} entries={entries} masked={masked} tone={assetColors[asset]} chartLabel={chartLabel} chartGrid={chartGrid} />)}</div> : <p className="panel-empty">No snapshots in this period.</p>}
-        {entries.length > 0 ? <details className="trend-data-details"><summary><span>View exact values</span><i aria-hidden="true" /></summary><div className="trend-table-scroll"><table className="trend-table"><thead><tr><th>Snapshot</th>{ASSET_KEYS.map((asset) => <th key={asset}>{ASSET_LABELS[asset]}</th>)}</tr></thead><tbody>{[...entries].reverse().map((entry) => <tr key={entry.id}><th>{fullDate(entry.date)}</th>{ASSET_KEYS.map((asset) => <td key={asset}>{formatSigned(entry.market_assets[asset].current - entry.market_assets[asset].invested, masked)}</td>)}</tr>)}</tbody></table></div></details> : null}
+        {entries.length > 0 ? <details className="trend-data-details"><summary><span>View exact values</span><i aria-hidden="true" /></summary><div className="trend-table-scroll"><table className="trend-table"><thead><tr><th>Snapshot</th>{ASSET_KEYS.map((asset) => <th key={asset}>{ASSET_LABELS[asset]}</th>)}</tr></thead><tbody>{[...entries].reverse().map((entry) => <tr key={entry.id}><th>{fullDate(entry.date)}</th>{ASSET_KEYS.map((asset) => { const value = entry.market_assets[asset].current - entry.market_assets[asset].invested; const tone = masked ? "" : value > 0 ? "is-positive" : value < 0 ? "is-negative" : "trend-value-neutral"; return <td key={asset} className={tone}>{formatSigned(value, masked)}</td>; })}</tr>)}</tbody></table></div></details> : null}
       </section>
+      </> : null}
     </div>
   );
 }
@@ -243,7 +245,7 @@ function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { a
       const context = chart.ctx;
       context.save();
       context.strokeStyle = chartLabel;
-      context.globalAlpha = 0.75;
+      context.globalAlpha = 0.45;
       context.lineWidth = 1;
       context.beginPath();
       context.moveTo(chart.chartArea.left, y);
@@ -252,36 +254,7 @@ function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { a
       context.restore();
     }
   };
-  const strokeOutline: Plugin<"line"> = {
-    id: `asset-stroke-outline-${asset}`,
-    afterDatasetDraw(chart) {
-      if (points.length < 2) return;
-      const context = chart.ctx;
-      const xScale = chart.scales.x;
-      const yScale = chart.scales.y;
-      context.save();
-      context.beginPath();
-      context.rect(chart.chartArea.left, chart.chartArea.top, chart.chartArea.right - chart.chartArea.left, chart.chartArea.bottom - chart.chartArea.top);
-      context.clip();
-      context.strokeStyle = chartLabel === "#AAA9A2" ? "#F4F2ED" : "#111111";
-      context.lineWidth = 4.5;
-      context.lineCap = "round";
-      context.lineJoin = "round";
-      context.beginPath();
-      points.forEach((point, index) => {
-        const x = xScale.getPixelForValue(point.x);
-        const y = yScale.getPixelForValue(point.y);
-        if (index === 0) context.moveTo(x, y);
-        else context.lineTo(x, y);
-      });
-      context.stroke();
-      context.strokeStyle = tone;
-      context.lineWidth = 2;
-      context.stroke();
-      context.restore();
-    }
-  };
-  const data: ChartData<"line", { x: number; y: number }[]> = { datasets: [{ label: `${ASSET_LABELS[asset]} unrealized gain/loss`, data: points, borderColor: tone, backgroundColor: `${tone}20`, borderWidth: 2, pointRadius: points.length < 2 ? 2 : 0, pointHoverRadius: 3, tension: 0.16, fill: { target: "origin", above: `${tone}20`, below: "rgba(215,38,61,.10)" } }] };
+  const data: ChartData<"line", { x: number; y: number }[]> = { datasets: [{ label: `${ASSET_LABELS[asset]} unrealized gain/loss`, data: points, borderColor: tone, backgroundColor: `${tone}18`, borderWidth: 1.4, pointRadius: points.length < 2 ? 2 : 0, pointHoverRadius: 2.5, tension: 0.16, fill: { target: "origin", above: `${tone}18`, below: "rgba(215,38,61,.08)" } }] };
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
@@ -292,7 +265,7 @@ function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { a
       y: { position: "right", min: axis.min, max: axis.max, grid: { color: chartGrid }, border: { display: false }, ticks: { maxTicksLimit: 3, stepSize: axis.step, color: chartLabel, callback(value) { return masked ? "" : formatCompactCurrency(Number(value), false); } } }
     }
   };
-  return <article className="asset-trend-card"><div className="asset-trend-heading"><span className="asset-color-dot" style={{ backgroundColor: tone }} /><h3>{ASSET_LABELS[asset]}</h3><strong className={latest < 0 ? "is-negative" : "is-positive"}>{formatSigned(latest, masked)}</strong></div><div className="asset-trend-chart"><Chart type="line" data={data} options={options} plugins={[zeroLine, strokeOutline]} /></div></article>;
+  return <article className="asset-trend-card"><div className="asset-trend-heading"><span className="asset-color-dot" style={{ backgroundColor: tone }} /><h3>{ASSET_LABELS[asset]}</h3><strong className={latest < 0 ? "is-negative" : "is-positive"}>{formatSigned(latest, masked)}</strong></div><div className="asset-trend-chart"><Chart type="line" data={data} options={options} plugins={[zeroLine]} /></div></article>;
 }
 
 function formatReturn(value: number | null, masked: boolean) {

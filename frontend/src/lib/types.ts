@@ -1,29 +1,63 @@
 export type RangeKey = "1M" | "3M" | "6M" | "1Y" | "3Y" | "5Y" | "ALL";
 
-export type TabKey = "dashboard" | "history" | "analytics";
+export type LandingPageKey = "dashboard" | "snapshots" | "analytics-overview" | "plan";
+export type AppearancePreference = "light" | "dark" | "auto";
+export type NumberFormatPreference = "indian" | "international";
 
 export type NullableNumber = number | null;
 
 export interface Dataset {
+  schemaVersion: number;
   entries: Entry[];
   meta: Meta;
+  incomeHistory: EffectiveDatedAmount[];
+  expenseHistory: EffectiveDatedAmount[];
+  goals: Goal[];
+  settings: UserSettings;
   preferences?: DatasetPreferences;
 }
 
 export interface DatasetPreferences {
-  version: 1;
-  shortTermGoal?: ShortTermGoal | null;
+  version: 2;
   notifications?: {
     dismissedGoalPromptAt?: string;
+    snoozedGoalPromptUntil?: string;
     dismissedGapMonth?: string;
   };
 }
 
-export interface ShortTermGoal {
+export interface UserSettings {
+  profileName: string;
+  appearance: AppearancePreference;
+  numberFormat: NumberFormatPreference;
+  defaultLandingPage: LandingPageKey;
+  hideAmountsByDefault: boolean;
+  autoHideOnBlur: boolean;
+  reminderDayOfMonth: number;
+  expectedMarketReturn: number | null;
+  emergencyFundTargetMonths: number;
+}
+
+export interface EffectiveDatedAmount {
+  from: string;
+  monthlyAmount: number;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  type: "milestone" | "long-term";
   targetAmount: number;
-  targetDate: string;
+  targetDate?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OneOff {
+  id: string;
+  type: "inflow" | "outflow";
+  amount: number;
+  label: string;
 }
 
 export interface Meta {
@@ -35,11 +69,10 @@ export interface Meta {
 export interface Entry {
   id: string;
   date: string;
-  income: { in_hand: NullableNumber };
   liquid: { bank: number; sodexo: number };
   hard_assets: { stocks_wallet: number; fd: number };
   market_assets: Record<string, MarketAsset>;
-  sip?: Record<string, NullableNumber>;
+  oneOffs: OneOff[];
   expenses_note: string;
 }
 
@@ -55,13 +88,6 @@ export interface DerivedMetric {
   liquidBuffer: number;
   marketExposure: number;
   netWorthAddition: number | null;
-  liquidBufferRatio: number | null;
-  capitalAddedRate: number | null;
-  investmentVelocity: number | null;
-  incomeEstimated: boolean;
-  totalSip: number;
-  sipByAsset: Record<string, number>;
-  contributionDelta: Record<string, number>;
   allocationByAsset: Record<string, number>;
   monthLabel: string;
 }
@@ -73,7 +99,6 @@ export interface SummaryMetric {
   latestNetWorth: number;
   latestHardCapital: number;
   latestLiquidBuffer: number;
-  latestIncome: number | null;
   allocationByAsset: Record<string, number>;
   totalUnrealized: number;
 }
@@ -111,7 +136,6 @@ export interface XirrAsset {
 }
 
 export interface XirrResponse {
-  lifePortfolio: XirrLens;
   marketPortfolio: XirrLens;
   perAsset: XirrLens & { perAsset: Record<string, XirrAsset> };
 }

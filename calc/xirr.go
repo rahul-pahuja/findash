@@ -33,7 +33,6 @@ type XirrAsset struct {
 }
 
 type XirrResponse struct {
-	LifePortfolio   XirrResult `json:"lifePortfolio"`
 	MarketPortfolio XirrResult `json:"marketPortfolio"`
 	PerAsset        XirrResult `json:"perAsset"`
 }
@@ -46,25 +45,9 @@ func ComputeXirr(dataset store.Dataset, rangeKey string, startDate, endDate *tim
 		end = entries[len(entries)-1].Date
 	}
 	return XirrResponse{
-		LifePortfolio:   computeLifePortfolio(entries, rangeKey, start, end),
 		MarketPortfolio: computeMarketPortfolio(entries, rangeKey, start, end),
 		PerAsset:        computePerAsset(entries, rangeKey, start, end),
 	}
-}
-
-func computeLifePortfolio(entries []store.Entry, rangeKey, start, end string) XirrResult {
-	flows := []CashFlow{}
-	for _, entry := range entries {
-		if entry.Income.InHand != nil && *entry.Income.InHand > 0 {
-			flows = append(flows, CashFlow{Date: ParseDate(entry.Date), Amount: -*entry.Income.InHand})
-		}
-	}
-	if len(entries) > 0 {
-		derived := ComputeDerived(store.Dataset{Entries: entries})
-		latest := derived[entries[len(entries)-1].ID]
-		flows = append(flows, CashFlow{Date: ParseDate(entries[len(entries)-1].Date), Amount: latest.CurrentNetWorth})
-	}
-	return buildXirrResult(flows, rangeKey, start, end, nil)
 }
 
 func computeMarketPortfolio(entries []store.Entry, rangeKey, start, end string) XirrResult {
@@ -170,34 +153,88 @@ func xirr(flows []CashFlow) (*float64, string, string) {
 	}
 
 	start := flows[0].Date
-	rate := 0.10
-	for i := 0; i < 100; i++ {
-		fx := 0.0
-		dfx := 0.0
-		for _, flow := range flows {
-			years := flow.Date.Sub(start).Hours() / 24 / 365
-			base := math.Pow(1+rate, years)
-			if math.IsNaN(base) || math.IsInf(base, 0) || 1+rate <= 0 {
-				return nil, "invalid", "XIRR diverged due to invalid rate bounds"
+	years := make([]float64, len(flows))
+	for i, flow := range flows {
+		years[i] = flow.Date.Sub(start).Hours() / 24 / 365
+	}
+	// Scale each NPV evaluation by its largest discount exponent. This keeps
+	// rates close to -100% finite while preserving the sign needed for bisection.
+	npv := func(rate float64) float64 {
+		if rate <= -1 {
+			return math.NaN()
+		}
+		logBase := math.Log1p(rate)
+		maxExponent := math.Inf(-1)
+		exponents := make([]float64, len(flows))
+		for i, year := range years {
+			exponents[i] = -year * logBase
+			if exponents[i] > maxExponent {
+				maxExponent = exponents[i]
 			}
-			fx += flow.Amount / base
-			dfx -= (years * flow.Amount) / math.Pow(1+rate, years+1)
 		}
-		if math.Abs(dfx) < 1e-10 {
-			return nil, "invalid", "XIRR derivative became unstable"
+		value := 0.0
+		for i, flow := range flows {
+			value += flow.Amount * math.Exp(exponents[i]-maxExponent)
 		}
-		next := rate - (fx / dfx)
-		if math.Abs(next-rate) < 1e-7 {
-			result := next
+		return value
+	}
+
+	// A Newton step can jump below -100% when the initial estimate is far from
+	// the answer. Probe outward from zero, then bisect the first sign-changing
+	// interval so large losses and uneven contributions still produce an XIRR.
+	rates := []float64{0, -0.1, 0.1, -0.25, 0.25, -0.5, 0.5, -0.75, 0.75, -0.9, 0.9, -0.99, 1, -0.999, 2, -0.9999, 5, -0.999999, 10, -0.999999999, 100, 1000, 1e6}
+	previousRate := rates[0]
+	previousValue := npv(previousRate)
+	if math.Abs(previousValue) < 1e-12 {
+		result := 0.0
+		return &result, "ok", "Converged"
+	}
+	for _, rate := range rates[1:] {
+		value := npv(rate)
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			previousRate, previousValue = rate, value
+			continue
+		}
+		if value == 0 {
+			result := rate
 			return &result, "ok", "Converged"
 		}
-		rate = next
+		if !math.IsNaN(previousValue) && !math.IsInf(previousValue, 0) && (value < 0) != (previousValue < 0) {
+			low, high := previousRate, rate
+			lowValue := previousValue
+			if low > high {
+				low, high = high, low
+				lowValue = value
+			}
+			for i := 0; i < 160; i++ {
+				mid := low + (high-low)/2
+				midValue := npv(mid)
+				if midValue == 0 {
+					low, high = mid, mid
+					break
+				}
+				if (midValue < 0) == (lowValue < 0) {
+					low, lowValue = mid, midValue
+				} else {
+					high = mid
+				}
+				if math.Abs(high-low) <= 1e-10*math.Max(1, math.Abs(mid)) {
+					break
+				}
+			}
+			result := low + (high-low)/2
+			return &result, "ok", "Converged"
+		}
+		previousRate, previousValue = rate, value
 	}
-	return nil, "invalid", "XIRR did not converge in 100 iterations"
+	return nil, "invalid", "XIRR root could not be bracketed"
 }
 
 func filterEntriesByDate(entries []store.Entry, rangeKey string, startDate, endDate *time.Time) []store.Entry {
 	base := FilterEntries(entries, rangeKey)
+	if startDate != nil || endDate != nil {
+		base = append([]store.Entry(nil), entries...)
+	}
 	if startDate == nil && endDate == nil {
 		return base
 	}

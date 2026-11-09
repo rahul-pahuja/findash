@@ -2,10 +2,11 @@ import type { ChartData, ChartOptions, Plugin } from "chart.js";
 import { Chart as ChartJS, Filler, registerables } from "chart.js";
 import { Chart } from "react-chartjs-2";
 import type { ReactNode } from "react";
-import type { DataResponse, Entry } from "../lib/types";
+import type { DataResponse, Entry, RangeKey } from "../lib/types";
+import { SegmentedControl } from "./FormControls";
 import { ASSET_KEYS, ASSET_LABELS, getAssetPalette } from "../utils/config";
 import { formatChartMonth, formatCompactCurrency, formatCurrency, formatDateLabel, formatPercent, getNiceAxisBounds } from "../utils/format";
-import { getSnapshotTotals } from "../utils/insights";
+import { getSnapshotTotals, selectPeriod } from "../utils/insights";
 
 ChartJS.register(...registerables, Filler);
 
@@ -14,13 +15,11 @@ interface Props {
   dataset: DataResponse["dataset"] | null;
   masked: boolean;
   themeMode: "light" | "dark";
+  chartRange: RangeKey;
+  onChartRangeChange: (range: RangeKey) => void;
 }
 
-function shortDate(date: string) {
-  return formatDateLabel(date, false);
-}
-
-export function Charts({ response, dataset, masked, themeMode }: Props) {
+export function Charts({ response, dataset, masked, themeMode, chartRange, onChartRangeChange }: Props) {
   if (!response || !dataset) return null;
 
   const entries = [...dataset.entries].sort((a, b) => a.date.localeCompare(b.date));
@@ -28,7 +27,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
   const netWorthColor = themeMode === "dark" ? "#91A3FF" : "#2447F5";
   const hardCapitalColor = themeMode === "dark" ? "#AAA69C" : "#6B6860";
   const marketFill = themeMode === "dark" ? "rgba(104,120,179,.28)" : "rgba(184,196,255,.55)";
-  const progressionEntries = entries.slice(-8);
+  const progressionEntries = selectPeriod(entries, chartRange).entries;
   const latest = entries[entries.length - 1];
   const latestTotals = latest ? getSnapshotTotals(latest) : null;
   const chartGrid = themeMode === "dark" ? "rgba(245,244,239,.10)" : "rgba(22,22,20,.09)";
@@ -43,12 +42,11 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
   const eventPlugin: Plugin<"line"> = {
     id: "snapshot-note-markers",
     afterDatasetsDraw(chart) {
-      const scale = chart.scales.x;
       const ctx = chart.ctx;
-      notes.forEach((entry) => {
-        const x = scale.getPixelForValue(Date.parse(`${entry.date}T00:00:00Z`));
+      const notePoints = chart.getDatasetMeta(2).data;
+      notePoints.forEach((point) => {
+        const { x, y } = point.getProps(["x", "y"], true);
         if (x < chart.chartArea.left || x > chart.chartArea.right) return;
-        const y = chart.scales.y.getPixelForValue(getSnapshotTotals(entry).netWorth);
         ctx.save();
         ctx.strokeStyle = themeMode === "dark" ? "rgba(244,242,237,.40)" : "rgba(17,17,17,.30)";
         ctx.setLineDash([3, 4]);
@@ -95,6 +93,18 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
         pointBorderWidth: 0,
         tension: 0.18,
         fill: false
+      },
+      {
+        label: "Snapshot notes",
+        data: notes.map((entry) => ({ x: Date.parse(`${entry.date}T00:00:00Z`), y: getSnapshotTotals(entry).netWorth })),
+        borderColor: "transparent",
+        backgroundColor: "transparent",
+        borderWidth: 0,
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointBorderWidth: 0,
+        showLine: false,
+        fill: false
       }
     ]
   };
@@ -106,14 +116,15 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
     plugins: {
       legend: { display: false },
       tooltip: {
+        filter(context) { return context.datasetIndex < 2; },
         backgroundColor: themeMode === "dark" ? "#252622" : "#FFFFFF",
         borderColor: themeMode === "dark" ? "#41413A" : "#DAD6CD",
         borderWidth: 1,
         cornerRadius: 12,
         displayColors: false,
-        padding: 12,
+        padding: { top: 8, right: 10, bottom: 8, left: 10 },
         titleFont: { size: 10, weight: 600 },
-        bodyFont: { size: 13, weight: 700 },
+        bodyFont: { size: 11, weight: 550 },
         titleColor: themeMode === "dark" ? "#AAA69C" : "#6B6860",
         bodyColor: themeMode === "dark" ? "#F4F2ED" : "#111111",
         callbacks: {
@@ -124,8 +135,14 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
           },
           label(context) {
             const value = Number(context.parsed.y);
-            const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === Number(context.parsed.x));
-            return `${context.dataset.label}: ${formatCurrency(value, masked)}${entry?.expenses_note ? ` · ${entry.expenses_note}` : ""}`;
+            return `${context.dataset.label}: ${formatCurrency(value, masked)}`;
+          },
+          afterBody(items) {
+            const timestamp = Number(items[0]?.parsed.x ?? 0);
+            const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
+            if (!entry?.expenses_note) return [];
+            const note = entry.expenses_note.trim();
+            return [`Note: ${note.length > 78 ? `${note.slice(0, 75).trimEnd()}…` : note}`];
           }
         }
       }
@@ -167,16 +184,15 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
     { key: "other", label: "Deposits + wallet", value: latest.hard_assets.fd + latest.hard_assets.stocks_wallet }
   ].filter((item) => item.value > 0).sort((a, b) => b.value - a.value) : [];
   const allocationTotal = latestTotals?.netWorth ?? 0;
-  const concentration = allocationTotal > 0 ? allocationItems.find((item) => ASSET_KEYS.includes(item.key as typeof ASSET_KEYS[number]) && item.value / allocationTotal > .6) : null;
+  const largestAllocation = allocationTotal > 0 ? allocationItems[0] : null;
 
   return (
     <section className="dashboard-visual-grid" aria-label="Wealth over time and asset allocation">
-      <ChartPanel title="Wealth progression" subtitle={`Latest ${progressionEntries.length} snapshots · actual dates`} className="progression-panel">
+      <ChartPanel title="Wealth progression" subtitle={`${progressionEntries.length} snapshots · actual dates`} className="progression-panel" actions={<SegmentedControl<RangeKey> ariaLabel="Chart date range" value={chartRange} onChange={onChartRangeChange} className="chart-range-control" options={[{ value: "3M", label: "3M" }, { value: "1Y", label: "1Y" }, { value: "ALL", label: "All" }]} />}>
         {progressionEntries.length > 0 ? (
           <>
             <div className="progression-legend"><span><i className="legend-line is-ink" />Net worth</span><span><i className="legend-line is-muted" />Hard capital</span><span><i className="legend-area" />Market movement</span><span><i className="legend-event-dot" />Snapshot note</span></div>
             <div className="wealth-chart"><Chart type="line" data={progressionData} options={progressionOptions} plugins={[eventPlugin]} /></div>
-            {notes.length > 0 ? <div className="event-list" aria-label="Notes marked on the wealth chart">{notes.map((entry) => <div className="event-item" key={entry.id}><span className="event-item-dot" /><time dateTime={entry.date}>{shortDate(entry.date)}</time><span>{entry.expenses_note}</span></div>)}</div> : null}
           </>
         ) : <p className="chart-empty">Add a snapshot to see your wealth progression.</p>}
       </ChartPanel>
@@ -196,7 +212,7 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
                 </div>
               ))}
             </div>
-            {concentration ? <p className="allocation-callout">{concentration.label} make up {formatPercent(concentration.value / allocationTotal, masked)} of current net worth.</p> : null}
+            {largestAllocation ? <p className="allocation-callout">Largest share: <strong>{largestAllocation.label}</strong> · {formatPercent(largestAllocation.value / allocationTotal, masked)} of current net worth.</p> : null}
           </>
         ) : <p className="chart-empty">No asset values in this snapshot.</p>}
       </ChartPanel>
@@ -204,6 +220,6 @@ export function Charts({ response, dataset, masked, themeMode }: Props) {
   );
 }
 
-function ChartPanel({ title, subtitle, children, className }: { title: string; subtitle: string; children: ReactNode; className: string }) {
-  return <article className={`chart-panel ${className}`}><div className="chart-panel-heading"><div><h2>{title}</h2><p>{subtitle}</p></div></div>{children}</article>;
+function ChartPanel({ title, subtitle, children, className, actions }: { title: string; subtitle: string; children: ReactNode; className: string; actions?: ReactNode }) {
+  return <article className={`chart-panel ${className}`}><div className="chart-panel-heading"><div><h2>{title}</h2><p>{subtitle}</p></div>{actions}</div>{children}</article>;
 }
