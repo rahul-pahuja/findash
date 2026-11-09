@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DataResponse, Entry, RangeKey } from "../lib/types";
 import { ASSET_KEYS } from "../utils/config";
 import { formatCompactCurrency, formatDateLabel, formatSigned } from "../utils/format";
@@ -37,10 +38,28 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
     .sort((a, b) => a.targetAmount - b.targetAmount)[0] ?? null;
   const goalProgress = nextGoal ? Math.min(100, Math.max(0, totals.netWorth / nextGoal.targetAmount * 100)) : 0;
   const capitalPace = getRegularCapitalPace(entries, 6);
-  const goalMonths = nextGoal && capitalPace
-    ? projectedMonths(totals.netWorth, nextGoal.targetAmount, capitalPace.amountPerMonth, response.dataset.settings.expectedMarketReturn ?? 0)
+  const expectedReturn = response.dataset.settings.expectedMarketReturn;
+  const showZeroReturnScenario = response.dataset.settings.showZeroReturnScenario;
+  const expectedGoalMonths = nextGoal && capitalPace && expectedReturn !== null
+    ? projectedMonths(totals.netWorth, nextGoal.targetAmount, capitalPace.amountPerMonth, expectedReturn)
     : null;
-  const goalEstimate = goalMonths === null ? null : estimateDate(latest.date, goalMonths);
+  const showDistinctZeroScenario = showZeroReturnScenario && expectedReturn !== 0;
+  const zeroGoalMonths = nextGoal && capitalPace && showDistinctZeroScenario
+    ? projectedMonths(totals.netWorth, nextGoal.targetAmount, capitalPace.amountPerMonth, 0)
+    : null;
+  const expectedGoalEstimate = expectedGoalMonths === null ? null : estimateDate(latest.date, expectedGoalMonths);
+  const zeroGoalEstimate = zeroGoalMonths === null ? null : estimateDate(latest.date, zeroGoalMonths);
+  const goalProjectionDetails = [
+    expectedGoalEstimate ? `around ${expectedGoalEstimate} at ${(expectedReturn! * 100).toFixed(1)}%` : null,
+    zeroGoalEstimate ? `around ${zeroGoalEstimate} at 0%` : null
+  ].filter((detail): detail is string => detail !== null);
+  const goalTileCopy = !capitalPace
+    ? "Add another snapshot to estimate a date from your recorded pace."
+    : goalProjectionDetails.length > 1
+      ? `At ${formatCompactCurrency(capitalPace.amountPerMonth, masked)} a month: ${goalProjectionDetails.join("; ")}.`
+      : goalProjectionDetails.length === 1
+        ? `At ${formatCompactCurrency(capitalPace.amountPerMonth, masked)} a month, ${goalProjectionDetails[0]}.`
+        : `Recorded pace is ${formatCompactCurrency(capitalPace.amountPerMonth, masked)} a month. Add a market return assumption in Plan to estimate a date.`;
   const hardCapitalChange = priorTotals ? totals.hardCapital - priorTotals.hardCapital : null;
   const marketMovement = priorTotals ? totals.unrealizedGain - priorTotals.unrealizedGain : null;
 
@@ -60,13 +79,12 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
           {hardCapitalChange !== null && marketMovement !== null ? <p className="hero-note">Hard capital changed <strong>{formatSigned(hardCapitalChange, masked)}</strong>; market movement changed <strong>{formatSigned(marketMovement, masked)}</strong> since {displayDate(previous!.date, false)}.</p> : null}
         </div>
         {nextGoal ? <aside className="goal-tile" aria-label={`Next milestone: ${nextGoal.name}`}>
-          <p className="goal-tile-eyebrow">Next milestone</p>
-          <h3 className="goal-tile-name">{nextGoal.name}</h3>
-          <p className="goal-tile-amount">{formatCompactCurrency(nextGoal.targetAmount, masked)}</p>
+          <div className="goal-tile-heading-row"><p className="goal-tile-eyebrow">Next milestone</p><span className="goal-tile-heading-separator" aria-hidden="true" /><h3 className="goal-tile-name">{nextGoal.name}</h3></div>
+          <p className="goal-tile-amount"><CompactCurrency value={nextGoal.targetAmount} masked={masked} /></p>
           <div className="goal-progress-track" role="progressbar" aria-label={`${nextGoal.name} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={masked ? undefined : Math.round(goalProgress)} aria-valuetext={masked ? "Progress hidden" : `${goalProgress.toFixed(1)}% complete`}><span style={{ width: masked ? "0%" : `${goalProgress}%` }} /></div>
           <div className="goal-progress-labels"><span>{masked ? "••% complete" : `${goalProgress.toFixed(1)}% there`}</span><span>{formatCompactCurrency(Math.max(0, nextGoal.targetAmount - totals.netWorth), masked)} to go</span></div>
-          <p className="goal-tile-copy">{capitalPace ? `At ${formatCompactCurrency(capitalPace.amountPerMonth, masked)} a month${goalEstimate ? `, around ${goalEstimate}` : ""}.` : "Add another snapshot to estimate a date from your recorded pace."}</p>
-          {nextGoal.targetDate ? <p className="goal-tile-date">Your target date: {displayDate(nextGoal.targetDate)}</p> : response.dataset.settings.expectedMarketReturn === null ? <p className="goal-tile-date">Projection uses a 0% market return assumption.</p> : null}
+          <p className="goal-tile-copy">{goalTileCopy}</p>
+          {nextGoal.targetDate ? <p className="goal-tile-date">Your target date: {displayDate(nextGoal.targetDate)}</p> : expectedReturn === null && showZeroReturnScenario ? <p className="goal-tile-date">Projection uses a 0% market return assumption.</p> : null}
           <button className="goal-edit-link" type="button" onClick={onOpenPlan}>Open Plan <span aria-hidden="true">→</span></button>
         </aside> : <aside className="goal-tile is-empty" aria-label="Set a financial milestone">
           <p className="goal-tile-eyebrow">Next milestone</p>
@@ -77,10 +95,10 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
       </section>
 
       <section className="metric-strip" aria-label="Supporting wealth measures">
-        <Metric label="Hard capital" value={formatCompactCurrency(totals.hardCapital, masked)} hint="Balances + invested principal" />
-        <Metric label="Market portfolio" value={formatCompactCurrency(marketPortfolio, masked)} hint="Current market value" />
-        <Metric label="Unrealized gain" value={formatCompactCurrency(totals.unrealizedGain, masked)} hint="Value less principal" tone={totals.unrealizedGain < 0 ? "negative" : "positive"} />
-        <Metric label="Cash buffer" value={formatCompactCurrency(totals.liquidBuffer, masked)} hint="Bank + Sodexo" />
+        <Metric label="Hard capital" value={<CompactCurrency value={totals.hardCapital} masked={masked} />} hint="Balances + invested principal" />
+        <Metric label="Market portfolio" value={<CompactCurrency value={marketPortfolio} masked={masked} />} hint="Current market value" />
+        <Metric label="Unrealized gain" value={<CompactCurrency value={totals.unrealizedGain} masked={masked} />} hint="Value less principal" tone={totals.unrealizedGain < 0 ? "negative" : "positive"} />
+        <Metric label="Cash buffer" value={<CompactCurrency value={totals.liquidBuffer} masked={masked} />} hint="Bank + Sodexo" />
       </section>
       <Charts response={response} dataset={response.dataset} masked={masked} themeMode={themeMode} chartRange={chartRange} onChartRangeChange={onChartRangeChange} />
 
@@ -95,6 +113,6 @@ export function Dashboard({ response, masked, themeMode, onOpenHistory, onEdit, 
   );
 }
 
-function Metric({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "positive" | "negative" }) {
+function Metric({ label, value, hint, tone }: { label: string; value: ReactNode; hint: string; tone?: "positive" | "negative" }) {
   return <article className="metric-strip-item"><p>{label}</p><strong className={tone ? `is-${tone}` : ""}>{value}</strong><span>{hint}</span></article>;
 }

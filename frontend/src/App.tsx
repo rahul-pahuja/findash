@@ -28,14 +28,18 @@ function storedPeriod(value: unknown): AnalyticsPeriod {
   if (typeof value === "string") return parseAnalyticsPeriod(`?range=${encodeURIComponent(value)}`);
   return { kind: "preset", range: "ALL" };
 }
-function titleFor(page: AppPage): [string, string] {
-  if (page === "dashboard") return ["Dashboard", "A clear view of your latest snapshot"];
+function titleFor(page: AppPage, profileName = ""): [string, string] {
+  if (page === "dashboard") return [profileName ? `${timeGreeting()}, ${profileName}` : "Dashboard", "A clear view of your latest snapshot"];
   if (page === "snapshots") return ["Snapshots", "Your wealth records, newest first"];
   if (page === "analytics-overview") return ["Analytics", "Overview · period comparison"];
   if (page === "analytics-investments") return ["Analytics", "Investments · portfolio performance"];
   if (page === "plan") return ["Plan", "Goals and personal finance assumptions"];
   if (page === "settings") return ["Settings", "Profile, privacy and data"];
   return ["Page not found", "This FinDash route does not exist"];
+}
+function timeGreeting() {
+  const hour = new Date().getHours();
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 function pathForLanding(page: Dataset["settings"]["defaultLandingPage"]) {
   return page === "dashboard" ? "/" : page === "snapshots" ? "/snapshots" : page === "plan" ? "/plan" : "/analytics/overview";
@@ -298,7 +302,7 @@ export default function App() {
     if (historyFilter === "big-moves") return getBigMoves(entries, 5).map((item) => item.entry);
     return entries;
   }, [entries, historyFilter]);
-  const [title, defaultSubtitle] = titleFor(route.page);
+  const [title, defaultSubtitle] = titleFor(route.page, dataset.settings.profileName.trim());
   const orderedEntries = [...entries].sort((a, b) => a.date.localeCompare(b.date));
   const pageSubtitle = route.page.startsWith("analytics") ? `${route.page === "analytics-overview" ? "Overview" : "Investments"} · ${analyticsPeriodLabel(period)}`
     : route.page === "snapshots" && orderedEntries.length ? `${orderedEntries.length} records · ${formatDateLabel(orderedEntries[0].date, false)}–${formatDateLabel(orderedEntries.at(-1)!.date, false)}`

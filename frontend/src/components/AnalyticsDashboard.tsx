@@ -215,7 +215,7 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
             })}
           </div>
         ) : <p className="panel-empty">{entries.length < 2 ? "Add another snapshot in this period to calculate money-weighted returns." : "Returns are unavailable for this period."}</p>}
-        <div className="performance-footer"><span>Overall return <strong className={rateCaveat ? "is-caveated" : ""}>{formatReturn(overallReturn, masked)}</strong> a year</span>{rateCaveat ? <p className="return-caveat">Short histories or rates above 100% can exaggerate yearly returns. Treat this as a rough guide.</p> : null}</div>
+        {rateCaveat ? <div className="performance-footer"><p className="return-caveat">Short histories or rates above 100% can exaggerate yearly returns. Treat this as a rough guide.</p></div> : null}
       </section>
 
       <section className="ruled-panel asset-trends-panel" aria-labelledby="asset-trends-heading">

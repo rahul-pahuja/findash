@@ -35,6 +35,7 @@ export interface UserSettings {
   autoHideOnBlur: boolean;
   reminderDayOfMonth: number;
   expectedMarketReturn: number | null;
+  showZeroReturnScenario: boolean;
   emergencyFundTargetMonths: number;
 }
 

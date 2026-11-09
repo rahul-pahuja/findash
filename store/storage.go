@@ -30,6 +30,21 @@ type Dataset struct {
 	Preferences    json.RawMessage        `json:"preferences,omitempty"`
 }
 
+// UnmarshalJSON keeps the default enabled for datasets created before the
+// zero-return scenario preference was persisted. An explicit false in newer
+// datasets is preserved by normal JSON decoding.
+func (data *Dataset) UnmarshalJSON(raw []byte) error {
+	type datasetJSON Dataset
+	decoded := datasetJSON{
+		Settings: UserSettings{ShowZeroReturnScenario: true},
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return err
+	}
+	*data = Dataset(decoded)
+	return nil
+}
+
 type Meta struct {
 	Currency    string `json:"currency"`
 	Created     string `json:"created"`
@@ -77,6 +92,7 @@ type UserSettings struct {
 	AutoHideOnBlur            bool     `json:"autoHideOnBlur"`
 	ReminderDayOfMonth        int      `json:"reminderDayOfMonth"`
 	ExpectedMarketReturn      *float64 `json:"expectedMarketReturn"`
+	ShowZeroReturnScenario    bool     `json:"showZeroReturnScenario"`
 	EmergencyFundTargetMonths int      `json:"emergencyFundTargetMonths"`
 }
 
@@ -432,7 +448,7 @@ const sampleData = `{
   "incomeHistory": [],
   "expenseHistory": [],
   "goals": [],
-  "settings": { "profileName": "", "appearance": "auto", "numberFormat": "indian", "defaultLandingPage": "dashboard", "hideAmountsByDefault": false, "autoHideOnBlur": false, "reminderDayOfMonth": 1, "expectedMarketReturn": null, "emergencyFundTargetMonths": 6 },
+  "settings": { "profileName": "", "appearance": "auto", "numberFormat": "indian", "defaultLandingPage": "dashboard", "hideAmountsByDefault": false, "autoHideOnBlur": false, "reminderDayOfMonth": 1, "expectedMarketReturn": null, "showZeroReturnScenario": true, "emergencyFundTargetMonths": 6 },
   "preferences": { "version": 2, "notifications": {} }
 }`
 

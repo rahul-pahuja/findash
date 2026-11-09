@@ -156,7 +156,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   const amountInput = (label: string, id: string, value: number | null, path: string, className = "") => (
       <input
         id={id}
-        className={[className, value === 0 ? "is-zero" : ""].filter(Boolean).join(" ")}
+        className={["modal-value-input", className, value === 0 ? "is-zero" : ""].filter(Boolean).join(" ")}
         type="text"
         aria-label={label}
         inputMode="decimal"
@@ -321,8 +321,8 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
             <button type="button" className="one-off-toggle" aria-expanded={oneOffOpen} onClick={() => setOneOffOpen((open) => !open)}><span>{oneOffOpen ? "− Add one-off in/out" : "+ Add one-off in/out"}</span><i aria-hidden="true">{oneOffOpen ? "⌃" : "›"}</i></button>
             {oneOffOpen ? <div className="one-off-add-row">
               <SegmentedControl ariaLabel="Cash event direction" value={oneOffType} onChange={setOneOffType} className="one-off-direction" options={[{ value: "inflow", label: "Inflow" }, { value: "outflow", label: "Outflow" }]} />
-              <FormInput aria-label="Cash event label" value={oneOffLabel} onChange={(event) => setOneOffLabel(event.target.value)} placeholder="Bonus, travel, medical…" />
-              <FormInput aria-label="Cash event amount" type="number" min="1" inputMode="decimal" value={oneOffAmount} onChange={(event) => setOneOffAmount(event.target.value)} placeholder="Amount in ₹" />
+              <FormInput aria-label="Cash event label" className="modal-text-input" value={oneOffLabel} onChange={(event) => setOneOffLabel(event.target.value)} placeholder="Bonus, travel, medical…" />
+              <FormInput aria-label="Cash event amount" className="modal-value-input" type="number" min="1" inputMode="decimal" value={oneOffAmount} onChange={(event) => setOneOffAmount(event.target.value)} placeholder="Amount in ₹" />
               <button type="button" className="primary-action" onClick={addOneOff}>Add event</button>
             </div> : null}
           </section>
@@ -337,6 +337,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
             >
               <span aria-hidden="true">{noteOpen ? "−" : "+"}</span>
               <span id="snapshot-notes-heading">{draft.expenses_note ? "Edit note" : "Add a note"}</span>
+              {!noteOpen ? <span className="snapshot-note-hint">Shows as a marker on your charts</span> : null}
             </button>
             {noteOpen && (
               <div id="snapshot-note-content" className="snapshot-note-content field entry-field">

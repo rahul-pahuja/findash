@@ -11,6 +11,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   autoHideOnBlur: false,
   reminderDayOfMonth: 1,
   expectedMarketReturn: null,
+  showZeroReturnScenario: true,
   emergencyFundTargetMonths: 6
 };
 

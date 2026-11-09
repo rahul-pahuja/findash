@@ -12,6 +12,7 @@ func TestSaveAndLoadDataset(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "data.json")
 	data := NewSampleDataset()
+	data.Settings.ShowZeroReturnScenario = false
 
 	if err := SaveDataset(path, data); err != nil {
 		t.Fatalf("save dataset: %v", err)
@@ -27,6 +28,26 @@ func TestSaveAndLoadDataset(t *testing.T) {
 	}
 	if loaded.Meta.Currency != "INR" {
 		t.Fatalf("expected INR currency, got %s", loaded.Meta.Currency)
+	}
+	if loaded.Settings.ShowZeroReturnScenario {
+		t.Fatal("expected the saved zero-return scenario preference to remain off")
+	}
+}
+
+func TestLegacyDatasetDefaultsZeroReturnScenarioOn(t *testing.T) {
+	legacyDatasets := []string{
+		`{"settings":{"appearance":"auto","numberFormat":"indian"}}`,
+		`{"settings":{"appearance":"auto","numberFormat":"indian","showZeroReturnScenario":false}}`,
+	}
+	want := []bool{true, false}
+	for i, raw := range legacyDatasets {
+		var data Dataset
+		if err := json.Unmarshal([]byte(raw), &data); err != nil {
+			t.Fatalf("unmarshal legacy dataset %d: %v", i, err)
+		}
+		if data.Settings.ShowZeroReturnScenario != want[i] {
+			t.Fatalf("dataset %d: expected showZeroReturnScenario=%t, got %t", i, want[i], data.Settings.ShowZeroReturnScenario)
+		}
 	}
 }
 
@@ -53,6 +74,9 @@ func TestMigrateLegacyDatasetDropsSnapshotIncomeAndSIP(t *testing.T) {
 	}
 	if data.SchemaVersion != 2 || len(data.IncomeHistory) != 0 || len(data.ExpenseHistory) != 0 || len(data.Goals) != 1 {
 		t.Fatalf("unexpected migrated schema: version=%d incomes=%d expenses=%d goals=%d", data.SchemaVersion, len(data.IncomeHistory), len(data.ExpenseHistory), len(data.Goals))
+	}
+	if !data.Settings.ShowZeroReturnScenario {
+		t.Fatal("expected legacy data to default the zero-return scenario to on")
 	}
 	encoded, err := json.Marshal(data)
 	if err != nil {

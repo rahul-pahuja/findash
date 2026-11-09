@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RangeKey } from "../lib/types";
 import type { AnalyticsPeriod } from "../utils/router";
 import { RANGE_OPTIONS } from "../utils/config";
@@ -25,13 +25,32 @@ interface Props {
 
 export function AppHeader(props: Props) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationAnchorRef = useRef<HTMLDivElement>(null);
+  const notificationButtonRef = useRef<HTMLButtonElement>(null);
   const pendingCount = props.notifications.length;
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    const dismissOutside = (event: PointerEvent) => {
+      if (!notificationAnchorRef.current?.contains(event.target as Node)) setNotificationsOpen(false);
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setNotificationsOpen(false);
+      notificationButtonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [notificationsOpen]);
   return <header className="page-toolbar">
     <div className="page-toolbar-title"><h1>{props.title}</h1><p>{props.subtitle}</p></div>
     <div className="toolbar-actions">
       {props.period && props.onPeriodChange ? <PeriodControl period={props.period} onChange={props.onPeriodChange} /> : null}
-      <div className="toolbar-popover-anchor">
-        <button className="toolbar-icon-button" type="button" onClick={() => setNotificationsOpen((open) => !open)} aria-label={pendingCount ? `Notifications, ${pendingCount} pending` : "Notifications"} aria-expanded={notificationsOpen}>
+      <div className="toolbar-popover-anchor" ref={notificationAnchorRef}>
+        <button ref={notificationButtonRef} className="toolbar-icon-button" type="button" onClick={() => setNotificationsOpen((open) => !open)} aria-label={pendingCount ? `Notifications, ${pendingCount} pending` : "Notifications"} aria-expanded={notificationsOpen}>
           <BellIcon />{pendingCount ? <span className="notification-dot" aria-hidden="true" /> : null}
         </button>
         {notificationsOpen ? <section className="header-popover notification-popover" aria-label="Notifications">
