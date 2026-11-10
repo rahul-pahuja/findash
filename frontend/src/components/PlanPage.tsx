@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { Dataset, EffectiveDatedAmount, Goal } from "../lib/types";
 import { formatCompactCurrency, formatCurrency, formatDateLabel, formatLakhsPerMonth, formatSigned, formatSignedPercent } from "../utils/format";
 import { getRegularCapitalPace, getSnapshotTotals } from "../utils/insights";
-import { estimateMonthYear, goalStatus, projectedMonths, requiredMonthlyAmount, type GoalStatus } from "../utils/goalProjection";
+import { estimateMonthYear, goalStatus, projectedMonths, reachedGoalStatus, requiredMonthlyAmount, type GoalStatus } from "../utils/goalProjection";
 import { CompactCurrency } from "./CompactCurrency";
 import { SwitchControl } from "./FormControls";
 import { GoalTimeline, type GoalProjectionView } from "./GoalTimeline";
@@ -31,6 +31,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
   const [removedGoal, setRemovedGoal] = useState<{ goal: Goal; index: number } | null>(null);
   const [hoveredGoalId, setHoveredGoalId] = useState<string | null>(null);
+  const [showReached, setShowReached] = useState(true);
   const [incomeDate, setIncomeDate] = useState(() => monthStart());
   const [incomeAmount, setIncomeAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(() => monthStart());
@@ -61,8 +62,8 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
   const savingsRate = monthlyIncome && pace6 ? pace6.amountPerMonth / monthlyIncome : null;
   const runway = monthlyExpenses && totals ? totals.liquidBuffer / monthlyExpenses : null;
 
-  const expectedReturn = dataset.settings.expectedMarketReturn ?? overallReturn;
-  const showZeroScenario = dataset.settings.showZeroReturnScenario && (expectedReturn === null || expectedReturn !== 0);
+  const expectedReturn = dataset.settings.expectedMarketReturn;
+  const showZeroScenario = dataset.settings.showZeroReturnScenario && expectedReturn !== null && expectedReturn !== 0;
   const projectionPace = pace6 && pace6.amountPerMonth > 0 ? pace6.amountPerMonth : null;
   const hasPace = projectionPace !== null && entries.length >= 2;
   const goals = useMemo(() => dataset.goals ?? [], [dataset.goals]);
@@ -76,33 +77,61 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
       return { months, label: estimateMonthYear(latest.date, months) ?? "" };
     };
     return goals.map((goal) => {
-      const expected = expectedReturn !== null ? crossing(goal, expectedReturn) : null;
-      const zero = showZeroScenario ? crossing(goal, 0) : null;
-      const status = !hasPace || !(expected ?? zero) || !goal.targetDate ? null : goalStatus((expected ?? zero)!.months, goal.targetDate, latest.date);
-      const required = goal.targetDate && expectedReturn !== null ? requiredMonthlyAmount(totals.netWorth, goal.targetAmount, expectedReturn, latest.date, goal.targetDate) : null;
+      const expected = expectedReturn !== null ? crossing(goal, expectedReturn) : crossing(goal, 0);
+      const zero = expectedReturn !== null && showZeroScenario ? crossing(goal, 0) : null;
+      const primaryCrossing = expected ?? zero;
+      const status = !hasPace || !primaryCrossing || !goal.targetDate ? null : goalStatus(primaryCrossing.months, goal.targetDate, latest.date);
+      const required = goal.targetDate ? requiredMonthlyAmount(totals.netWorth, goal.targetAmount, expectedReturn ?? 0, latest.date, goal.targetDate) : null;
       return { goal, expected, zero, status, required };
     });
   }, [goals, latest, totals, projectionPace, expectedReturn, showZeroScenario, hasPace]);
 
-  const drawnIds = useMemo(() => {
+  const activeViews = useMemo(() => {
     const currentNetWorth = totals?.netWorth ?? 0;
-    const pending = goalViews.filter((v) => v.goal.targetAmount > currentNetWorth);
+    return goalViews.filter((v) => v.goal.targetAmount > currentNetWorth);
+  }, [goalViews, totals?.netWorth]);
 
+  const reachedViews = useMemo(() => {
+    const currentNetWorth = totals?.netWorth ?? 0;
+    return goalViews.filter((v) => v.goal.targetAmount <= currentNetWorth);
+  }, [goalViews, totals?.netWorth]);
+
+  const drawnIds = useMemo(() => {
+    const pending = [...activeViews];
     const sortFn = (a: typeof goalViews[0], b: typeof goalViews[0]) => {
       if (a.goal.targetDate && b.goal.targetDate) return a.goal.targetDate.localeCompare(b.goal.targetDate);
       if (a.goal.targetDate) return -1;
       if (b.goal.targetDate) return 1;
       return a.goal.targetAmount - b.goal.targetAmount;
     };
+    pending.sort(sortFn);
+    return pending.slice(0, 4).map((view) => view.goal.id);
+  }, [activeViews]);
 
-    if (pending.length > 0) {
-      pending.sort(sortFn);
-      return pending.slice(0, 4).map((view) => view.goal.id);
+  const reachedDates = useMemo(() => {
+    const dates: Record<string, string> = {};
+    for (const { goal } of reachedViews) {
+      let date = latest?.date ?? todayDate();
+      for (const entry of entries) {
+        if (getSnapshotTotals(entry).netWorth >= goal.targetAmount) {
+          date = entry.date;
+          break;
+        }
+      }
+      dates[goal.id] = date;
     }
+    return dates;
+  }, [reachedViews, entries, latest?.date]);
 
-    const achieved = [...goalViews].sort(sortFn);
-    return achieved.slice(0, 4).map((view) => view.goal.id);
-  }, [goalViews, totals?.netWorth]);
+  const goalsSubtitle = useMemo(() => {
+    if (!latest || !totals || goals.length === 0) {
+      return "Where your current pace takes you, goal by goal.";
+    }
+    if (reachedViews.length > 0) {
+      return `${activeViews.length} active · ${reachedViews.length} reached`;
+    }
+    return "Where your current pace takes you, goal by goal.";
+  }, [latest, totals, goals.length, activeViews.length, reachedViews.length]);
 
   useEffect(() => {
     if (!goalSheet) return;
@@ -270,7 +299,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
       <div className="section-heading">
         <div>
           <h2 id="goals-heading">Goals</h2>
-          <p>Where your current pace takes you, goal by goal.</p>
+          <p>{goalsSubtitle}</p>
         </div>
       </div>
 
@@ -281,61 +310,147 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
         </div> : null}
 
         {hasPace ? <div className="goal-legend">
-          {expectedReturn !== null ? <span className="goal-legend-item"><i className="goal-legend-line is-accent" aria-hidden="true" />At {(expectedReturn * 100).toFixed(1)}% a year</span> : null}
-          {showZeroScenario ? <span className="goal-legend-item"><i className="goal-legend-line is-zero" aria-hidden="true" />No market growth</span> : null}
-          <span className="goal-legend-item"><i className="goal-legend-diamond" aria-hidden="true" />Your target date</span>
-          <span className="goal-legend-item"><i className="goal-legend-dot" aria-hidden="true" />Projected</span>
+          <span className="goal-legend-item"><i className="goal-legend-dot" aria-hidden="true" />You are here</span>
+          {expectedReturn !== null ? (
+            <>
+              <span className="goal-legend-item"><i className="goal-legend-line is-accent" aria-hidden="true" />At {(expectedReturn * 100).toFixed(1)}% a year</span>
+              {showZeroScenario ? <span className="goal-legend-item"><i className="goal-legend-line is-zero" aria-hidden="true" />No market growth</span> : null}
+            </>
+          ) : (
+            <span className="goal-legend-item"><i className="goal-legend-line is-accent" aria-hidden="true" />At your current pace</span>
+          )}
+          {activeViews.some((v) => v.goal.targetDate && drawnIds.includes(v.goal.id)) ? (
+            <span className="goal-legend-item"><i className="goal-legend-diamond" aria-hidden="true" />Your target date</span>
+          ) : null}
+          <span className="goal-legend-item"><i className="goal-legend-ring" aria-hidden="true" />Projected date</span>
         </div> : null}
 
         {goals.length ? <GoalTimeline projections={goalViews} drawnIds={drawnIds} current={totals.netWorth} latestDate={latest.date} pace={hasPace ? projectionPace : null} expectedReturn={expectedReturn} showZeroScenario={showZeroScenario} masked={masked} canProject={hasPace} hoveredId={hoveredGoalId} onHoverGoal={setHoveredGoalId} /> : null}
 
+        {hasPace ? (
+          expectedReturn === null ? (
+            <p className="goal-projection-footnote">
+              Showing your current pace only.{" "}
+              <button type="button" className="goal-notice-link" onClick={openMarketReturnModal}>
+                Set an expected market return
+              </button>{" "}
+              to compare a second scenario.{reachedViews.length > 0 ? " Reached goals are listed below, not plotted." : ""}
+            </p>
+          ) : (
+            <p className="goal-projection-footnote">
+              Projections use your trailing 6 and 12-month capital pace ({formatCompactCurrency(pace6!.amountPerMonth, masked)} a month) plus your expected return.{showZeroScenario ? " Open a goal for the 0% scenario and edit it." : ""}{reachedViews.length > 0 ? " Reached goals are listed below, not plotted." : ""}
+            </p>
+          )
+        ) : null}
+
         {goals.length ? <div className="goal-table-wrap"><table className="goal-table">
           <thead><tr><th scope="col">GOAL</th><th scope="col" className="is-num">TARGET</th><th scope="col">PROGRESS</th><th scope="col">PROJECTED</th><th scope="col">STATUS</th><th scope="col"><span className="visually-hidden">Open goal</span></th></tr></thead>
-          <tbody>{goalViews.map((view) => {
-            const { goal } = view;
-            const progress = Math.min(100, Math.max(0, totals.netWorth / goal.targetAmount * 100));
-            const remaining = Math.max(0, goal.targetAmount - totals.netWorth);
-            const isAchieved = totals.netWorth >= goal.targetAmount;
-            const projectedCrossing = view.expected ?? view.zero;
-            const chip = isAchieved
-              ? { kind: "ahead", label: "Achieved" }
-              : !goal.targetDate
-              ? { kind: "muted", label: "No date set" }
-              : !hasPace || !projectedCrossing || !view.status
-              ? { kind: "muted", label: "Can't project yet" }
-              : { kind: view.status.kind, label: view.status.label };
-            return <tr key={goal.id} className={hoveredGoalId === goal.id ? "is-hovered" : ""} onClick={() => openEditSheet(goal)} onMouseEnter={() => setHoveredGoalId(goal.id)} onMouseLeave={() => setHoveredGoalId(null)} onFocus={() => setHoveredGoalId(goal.id)} onBlur={() => setHoveredGoalId(null)}>
-              <td>
-                <button type="button" className="goal-row-open" onClick={() => openEditSheet(goal)} aria-haspopup="dialog">
-                  <strong>{goal.name}</strong>
-                  <small>{goal.type === "long-term" ? "Long-term" : "Short-term"}{goal.targetDate ? ` · target ${formatDateLabel(goal.targetDate)}` : " · no date set"}</small>
-                </button>
-              </td>
-              <td className="is-num"><CompactCurrency value={goal.targetAmount} masked={masked} /></td>
-              <td>
-                <div className="goal-progress-track is-table" role="progressbar" aria-label={`${goal.name} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={masked ? undefined : Math.round(progress)}><span style={{ width: `${masked ? 0 : progress}%` }} /></div>
-                <small>{masked ? "••" : `${progress.toFixed(1)}%`} · {formatCompactCurrency(remaining, masked)} to go</small>
-              </td>
-              <td>
-                {isAchieved ? (
-                  <><strong>Achieved</strong><small>already reached</small></>
-                ) : hasPace && projectedCrossing ? (
-                  <><strong>{projectedCrossing.label}</strong><small>at {view.expected && expectedReturn !== null ? `${(expectedReturn * 100).toFixed(1)}%` : "0%"} a year</small></>
-                ) : (
-                  <><strong>—</strong><small>needs a positive pace</small></>
-                )}
-              </td>
-              <td>
-                <span className={`goal-status-chip is-${chip.kind}`}>{chip.label}</span>
-                {!isAchieved && goal.targetDate && view.required !== null ? <small>{view.required > 0 ? <>needs ≈ <span className="nowrap-amount">{formatLakhsPerMonth(view.required, masked)}</span> a month</> : "on pace already"}</small> : null}
-              </td>
-              <td className="is-chevron" aria-hidden="true">›</td>
-            </tr>;
-          })}</tbody>
+          <tbody>
+            {activeViews.map((view) => {
+              const { goal } = view;
+              const progress = Math.min(100, Math.max(0, totals.netWorth / goal.targetAmount * 100));
+              const remaining = Math.max(0, goal.targetAmount - totals.netWorth);
+              const projectedCrossing = view.expected ?? view.zero;
+              const chip = !goal.targetDate
+                ? { kind: "muted", label: "No date set" }
+                : !hasPace || !projectedCrossing || !view.status
+                ? { kind: "muted", label: "Can't project yet" }
+                : { kind: view.status.kind, label: view.status.label };
+              return <tr key={goal.id} className={hoveredGoalId === goal.id ? "is-hovered" : ""} onClick={() => openEditSheet(goal)} onMouseEnter={() => setHoveredGoalId(goal.id)} onMouseLeave={() => setHoveredGoalId(null)} onFocus={() => setHoveredGoalId(goal.id)} onBlur={() => setHoveredGoalId(null)}>
+                <td>
+                  <button type="button" className="goal-row-open" onClick={() => openEditSheet(goal)} aria-haspopup="dialog">
+                    <strong>{goal.name}</strong>
+                    <small>{goal.type === "long-term" ? "Long-term" : "Short-term"}{goal.targetDate ? ` · target ${formatDateLabel(goal.targetDate)}` : " · no date set"}</small>
+                  </button>
+                </td>
+                <td className="is-num"><CompactCurrency value={goal.targetAmount} masked={masked} /></td>
+                <td>
+                  <div className="goal-progress-track is-table" role="progressbar" aria-label={`${goal.name} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={masked ? undefined : Math.round(progress)}><span style={{ width: `${masked ? 0 : progress}%` }} /></div>
+                  <small>{masked ? "••" : `${progress.toFixed(1)}%`} · {formatCompactCurrency(remaining, masked)} to go</small>
+                </td>
+                <td>
+                  {hasPace && projectedCrossing ? (
+                    <><strong>{projectedCrossing.label}</strong><small>{expectedReturn !== null ? `at ${(expectedReturn * 100).toFixed(1)}% a year` : "at your current pace"}</small></>
+                  ) : (
+                    <><strong>—</strong><small>needs a positive pace</small></>
+                  )}
+                </td>
+                <td>
+                  <span className={`goal-status-chip is-${chip.kind}`}>{chip.label}</span>
+                  {!goal.targetDate ? (
+                    <button
+                      type="button"
+                      className="goal-status-action-link"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditSheet(goal);
+                      }}
+                    >
+                      Add a date to see what you need a month
+                    </button>
+                  ) : view.required !== null ? (
+                    <small>{view.required > 0 ? <>needs ≈ <span className="nowrap-amount">{view.required >= 100_000 ? formatLakhsPerMonth(view.required, masked) : formatCompactCurrency(view.required, masked)}</span> a month</> : "on pace already"}</small>
+                  ) : null}
+                </td>
+                <td className="is-chevron" aria-hidden="true">›</td>
+              </tr>;
+            })}
+
+            {reachedViews.length > 0 ? (
+              <tr className="goal-reached-divider-row">
+                <td colSpan={6}>
+                  <div className="goal-reached-heading">
+                    <span className="goal-reached-label">REACHED · {reachedViews.length}</span>
+                    <button
+                      type="button"
+                      className={`goal-reached-toggle-btn ${showReached ? "is-expanded" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowReached((prev) => !prev);
+                      }}
+                      aria-expanded={showReached}
+                    >
+                      <span>{showReached ? "Hide" : "View"}</span>
+                      <i aria-hidden="true" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ) : null}
+
+            {showReached && reachedViews.map((view) => {
+              const { goal } = view;
+              const reachedDate = reachedDates[goal.id] ?? latest.date;
+              const reachedChip = reachedGoalStatus(reachedDate, goal.targetDate);
+              return <tr key={goal.id} className={`goal-reached-row ${hoveredGoalId === goal.id ? "is-hovered" : ""}`} onClick={() => openEditSheet(goal)} onMouseEnter={() => setHoveredGoalId(goal.id)} onMouseLeave={() => setHoveredGoalId(null)} onFocus={() => setHoveredGoalId(goal.id)} onBlur={() => setHoveredGoalId(null)}>
+                <td>
+                  <button type="button" className="goal-row-open" onClick={() => openEditSheet(goal)} aria-haspopup="dialog">
+                    <strong>
+                      <span className="goal-reached-check" aria-hidden="true">✓</span>{" "}
+                      {goal.name}
+                    </strong>
+                    <small>{goal.type === "long-term" ? "Long-term" : "Short-term"}{goal.targetDate ? ` · target ${formatDateLabel(goal.targetDate)}` : " · no date set"}</small>
+                  </button>
+                </td>
+                <td className="is-num"><CompactCurrency value={goal.targetAmount} masked={masked} /></td>
+                <td>
+                  <div className="goal-progress-track is-table is-reached" role="progressbar" aria-label={`${goal.name} progress`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={100}><span style={{ width: "100%" }} /></div>
+                  <small>{masked ? "••" : "100%"} · reached</small>
+                </td>
+                <td>
+                  <strong>{estimateMonthYear(reachedDate, 0)}</strong>
+                  <small>date reached</small>
+                </td>
+                <td>
+                  <span className={`goal-status-chip is-${reachedChip.kind}`}>{reachedChip.label}</span>
+                </td>
+                <td className="is-chevron" aria-hidden="true">›</td>
+              </tr>;
+            })}
+          </tbody>
         </table></div> : null}
 
         {goals.length ? <button className="goal-add-own-row" type="button" onClick={openAddSheet}>+ Add your own goal <span aria-hidden="true">›</span></button> : null}
-        {hasPace ? <p className="goal-projection-footnote">Projections use your trailing 6 and 12-month capital pace ({formatCompactCurrency(pace6!.amountPerMonth, masked)} a month){expectedReturn !== null ? " plus your expected return" : ""}.{showZeroScenario ? " Open a goal for the 0% scenario and edit it." : ""}</p> : null}
       </>}
       {!goals.length ? <article className="goal-empty-feature"><div><p className="goal-feature-eyebrow">Start planning</p><h3>Choose a goal to track</h3></div><div><p>Add a target to see your progress and a projected date based on your saved snapshots.</p><button className="goal-feature-primary" type="button" onClick={openAddSheet}>Set a target</button></div></article> : null}
     </section>
@@ -495,7 +610,7 @@ export function PlanPage({ dataset, masked, overallReturn, overallReturnLoading,
                   {view?.required !== null && view?.required !== undefined && (
                     <div className="goal-projection-row">
                       <dt>To hit your date</dt>
-                      <dd>{view.required > 0 ? `add ≈ ${formatLakhsPerMonth(view.required, masked)} a month` : "on pace already"}</dd>
+                      <dd>{view.required > 0 ? `needs ≈ ${view.required >= 100_000 ? formatLakhsPerMonth(view.required, masked) : formatCompactCurrency(view.required, masked)} a month` : "on pace already"}</dd>
                     </div>
                   )}
                 </div>

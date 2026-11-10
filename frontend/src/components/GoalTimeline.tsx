@@ -126,7 +126,9 @@ export function GoalTimeline({ projections, drawnIds, current, latestDate, pace,
     items.sort((a, b) => a.rawY - b.rawY);
 
     for (let i = 0; i < items.length; i++) {
-      const defaultSide = items[i].hasTargetDate || items[i].targetAmount <= yMax / 2 ? "right" : "left";
+      // Place goal labels on the left above the line so they stay completely clear
+      // of projection curves and crossing rings rising to the target on the right.
+      const defaultSide = items.length === 1 ? "left" : (i % 2 === 0 ? "left" : "right");
       layout[items[i].id] = { side: defaultSide, y: items[i].rawY - 7 * k };
     }
 
@@ -176,7 +178,7 @@ export function GoalTimeline({ projections, drawnIds, current, latestDate, pace,
             className="goal-timeline-drop-guide"
             x1={xScale(item!.ms)}
             x2={xScale(item!.ms)}
-            y1={y}
+            y1={y + 24 * k}
             y2={PLOT.bottom}
           />
         ));
@@ -185,19 +187,27 @@ export function GoalTimeline({ projections, drawnIds, current, latestDate, pace,
       <line className="goal-timeline-baseline" x1={PLOT.left} x2={PLOT.right} y1={PLOT.bottom} y2={PLOT.bottom} />
 
       {yTicks.map((tick) => <text key={`y-${tick}`} className="goal-timeline-tick" style={textStyle()} x={PLOT.right + 10 * k} y={yScale(tick) + 4 * k}>{money(tick)}</text>)}
-      {yearTicks.map((ms) => {
+      {yearTicks.map((ms, idx) => {
         const x = Math.max(PLOT.left, Math.min(PLOT.right, xScale(ms)));
-        return <text key={`x-${ms}`} className="goal-timeline-tick" style={textStyle()} x={x} y={PLOT.bottom + 22 * k} textAnchor={ms === yearTicks[0] ? "start" : "middle"}>{new Date(ms).getUTCFullYear()}</text>;
+        const yr = new Date(ms).getUTCFullYear();
+        const tickText = yearSpan <= 5 ? (idx === 0 ? monthYearLabel(latestDate) : `Jan ${yr}`) : String(yr);
+        return <text key={`x-${ms}`} className="goal-timeline-tick" style={textStyle()} x={x} y={PLOT.bottom + 22 * k} textAnchor={idx === 0 ? "start" : "middle"}>{tickText}</text>;
       })}
 
       <g clipPath="url(#goal-timeline-clip)">
-        {pace !== null && expectedReturn !== null ? <path className="goal-timeline-scenario is-expected" style={{ strokeWidth: 2.5 * k }} d={curvePath(expectedReturn)} /> : null}
-        {pace !== null && showZeroScenario && expectedReturn !== 0 ? <path className="goal-timeline-scenario is-zero" style={{ strokeWidth: 2 * k, strokeDasharray: `${6 * k} ${6 * k}` }} d={curvePath(0)} /> : null}
+        {pace !== null && expectedReturn !== null ? (
+          <path className="goal-timeline-scenario is-expected" style={{ strokeWidth: 2.5 * k }} d={curvePath(expectedReturn)} />
+        ) : pace !== null ? (
+          <path className="goal-timeline-scenario is-expected" style={{ strokeWidth: 2.5 * k }} d={curvePath(0)} />
+        ) : null}
+        {pace !== null && showZeroScenario && expectedReturn !== null && expectedReturn !== 0 ? (
+          <path className="goal-timeline-scenario is-zero" style={{ strokeWidth: 2 * k, strokeDasharray: `${6 * k} ${6 * k}` }} d={curvePath(0)} />
+        ) : null}
       </g>
 
       {drawn.map(({ goal }) => {
         const y = yScale(goal.targetAmount);
-        const pos = labelLayout[goal.id] ?? { side: "right", y: y - 7 * k };
+        const pos = labelLayout[goal.id] ?? { side: "left", y: y - 7 * k };
         const dimmed = hoveredId !== null && hoveredId !== goal.id;
         const targetMs = goal.targetDate ? Date.parse(`${goal.targetDate}T00:00:00Z`) : null;
         const isAchieved = goal.targetAmount <= current;
@@ -223,13 +233,21 @@ export function GoalTimeline({ projections, drawnIds, current, latestDate, pace,
           const anchor = x > PLOT.right - 60 * k ? "end" : x < PLOT.left + 60 * k ? "start" : "middle";
           return <g key={`${goal.id}-${key}`}>
             <circle className={`goal-timeline-crossing is-${kind}`} style={{ strokeWidth: 1.5 * k }} cx={x} cy={y} r={4.5 * k} />
-            <text className="goal-timeline-crossing-label" style={textStyle()} x={x} y={y + 21 * k} textAnchor={anchor}>{label}</text>
+            <text className="goal-timeline-crossing-label" style={textStyle(550)} x={x} y={y + 17 * k} textAnchor={anchor}>{label}</text>
           </g>;
         });
       })}
 
       <circle className="goal-timeline-here-dot" cx={xScale(t0)} cy={yScale(current)} r={5 * k} />
-      {!canProject ? <text className="goal-timeline-here-label" style={textStyle(650)} x={xScale(t0) + 8 * k} y={yScale(current) - 10 * k}>You are here · {money(current)}</text> : null}
+      {(() => {
+        const yPos = yScale(current);
+        const labelY = yPos > height - 60 * k ? yPos - 10 * k : yPos + 18 * k;
+        return (
+          <text className="goal-timeline-here-label" style={textStyle(650)} x={xScale(t0) + 8 * k} y={labelY}>
+            You are here · {money(current)}
+          </text>
+        );
+      })()}
 
     </svg>
   </div>;

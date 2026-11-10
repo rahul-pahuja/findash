@@ -928,23 +928,24 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .goal-legend-line.is-zero { border-top: 2px dashed var(--ink-muted); }
 .goal-legend-diamond { display: inline-block; width: 8px; height: 8px; background: var(--ink); transform: rotate(45deg); }
 .goal-legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--action); }
+.goal-legend-ring { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--action); background: var(--surface); box-sizing: border-box; }
 .goal-timeline-wrap { width: 100%; }
 .goal-timeline { display: block; width: 100%; height: auto; margin: 4px 0 0; }
-.goal-timeline text { fill: var(--ink-muted); font-family: var(--font-sans); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.goal-timeline text { fill: var(--ink-muted); font-family: var(--font-sans); font-size: 11.5px; font-variant-numeric: tabular-nums; paint-order: stroke fill; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
 .goal-timeline .goal-timeline-baseline { stroke: var(--rule); stroke-width: 1; }
 .goal-timeline .goal-timeline-guide { stroke: var(--rule); stroke-width: 1; stroke-dasharray: 3 5; }
 .goal-timeline .goal-timeline-goal-line { stroke: var(--ink); stroke-width: 1.1; stroke-dasharray: 1.5 4.5; stroke-linecap: round; opacity: .62; transition: opacity .15s ease, stroke-width .15s ease; }
-.goal-timeline .goal-timeline-goal-label { fill: var(--ink); font-weight: 650; }
-.goal-timeline .goal-timeline-date-label { fill: var(--ink-soft); font-weight: 600; }
+.goal-timeline .goal-timeline-goal-label { fill: var(--ink); font-weight: 650; stroke: var(--surface); stroke-width: 4.5px; }
+.goal-timeline .goal-timeline-date-label { fill: var(--ink-soft); font-weight: 600; stroke: var(--surface); stroke-width: 4px; }
 .goal-timeline .goal-timeline-diamond { fill: var(--ink); }
 .goal-timeline .goal-timeline-scenario { fill: none; }
 .goal-timeline .goal-timeline-scenario.is-expected { stroke: var(--action); stroke-width: 2.5; }
 .goal-timeline .goal-timeline-scenario.is-zero { stroke: var(--ink-muted); stroke-width: 2; stroke-dasharray: 6 6; }
-.goal-timeline .goal-timeline-crossing.is-expected { fill: var(--action); }
+.goal-timeline .goal-timeline-crossing.is-expected { fill: var(--surface); stroke: var(--action); stroke-width: 2.5; }
 .goal-timeline .goal-timeline-crossing.is-zero { fill: var(--surface); stroke: var(--ink-muted); stroke-width: 1.5; }
-.goal-timeline .goal-timeline-crossing-label { fill: var(--ink-soft); }
+.goal-timeline .goal-timeline-crossing-label { fill: var(--ink-soft); stroke: var(--surface); stroke-width: 4px; }
 .goal-timeline .goal-timeline-here-dot { fill: var(--action); }
-.goal-timeline .goal-timeline-here-label { fill: var(--ink); font-weight: 650; }
+.goal-timeline .goal-timeline-here-label { fill: var(--ink); font-weight: 650; stroke: var(--surface); stroke-width: 4.5px; }
 .goal-timeline g.is-dimmed .goal-timeline-goal-line { opacity: .25; }
 .goal-timeline g.is-hovered .goal-timeline-goal-line { opacity: 1; stroke-width: 1.8; }
 .goal-timeline g.is-dimmed .goal-timeline-goal-label, .goal-timeline g.is-dimmed .goal-timeline-diamond, .goal-timeline g.is-dimmed .goal-timeline-date-label { opacity: .35; }
@@ -963,6 +964,17 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .goal-row-open small { color: var(--ink-muted); font-size: 11px; font-weight: 400; }
 .goal-table td small { display: block; margin-top: 5px; color: var(--ink-muted); font-size: 11px; font-weight: 400; }
 .goal-table .goal-progress-track.is-table { height: 8px; max-width: 230px; background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.goal-progress-track.is-reached > span { background: var(--positive) !important; }
+.goal-status-action-link { display: block; margin-top: 5px; padding: 0; border: 0; background: transparent; color: var(--action); font-size: 11px; font-weight: 500; text-align: left; cursor: pointer; }
+.goal-status-action-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+.goal-reached-divider-row td { padding: 26px 0 10px; border-bottom: 1px solid var(--rule); background: transparent !important; cursor: default; }
+.goal-reached-heading { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.goal-reached-label { color: var(--ink-muted); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.goal-reached-toggle-btn { display: inline-flex; align-items: center; gap: 7px; padding: 4px 0; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; cursor: pointer; transition: color .15s ease; }
+.goal-reached-toggle-btn:hover { color: var(--ink); }
+.goal-reached-toggle-btn i { display: inline-block; width: 6.5px; height: 6.5px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .18s ease; }
+.goal-reached-toggle-btn.is-expanded i { margin-top: 3px; transform: rotate(225deg); }
+.goal-reached-check { display: inline-block; margin-right: 2px; color: var(--positive); font-weight: 700; }
 .goal-status-chip { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 11px; border-radius: 999px; font-size: 11px; font-weight: 650; white-space: nowrap; }
 .goal-status-chip.is-behind { background: #ffe5d9; color: #9a3412; }
 .goal-status-chip.is-on-track, .goal-status-chip.is-ahead { background: #ddf3e6; color: var(--positive); }

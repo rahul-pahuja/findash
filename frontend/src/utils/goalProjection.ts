@@ -38,7 +38,7 @@ export function requiredMonthlyAmount(current: number, target: number, annualRat
   if (annualRate <= -1) return null;
   const days = (Date.parse(`${targetDate}T00:00:00Z`) - Date.parse(`${fromDate}T00:00:00Z`)) / 86_400_000;
   if (!Number.isFinite(days) || days <= 0) return null;
-  const months = days / 30.4375 * 12;
+  const months = days / 30.4375;
   const monthlyRate = annualRate === 0 ? 0 : Math.pow(1 + annualRate, 1 / 12) - 1;
   const growth = Math.pow(1 + monthlyRate, months);
   const annuityFactor = monthlyRate === 0 ? months : (growth - 1) / monthlyRate;
@@ -74,3 +74,25 @@ export function pickNextGoal(goals: Goal[], netWorth: number) {
   if (dated.length) return dated[0];
   return [...pending].sort((a, b) => a.targetAmount - b.targetAmount)[0] ?? null;
 }
+
+/**
+ * Calculates the timing difference between when a goal was achieved and its
+ * target date in calendar months. Returns early, late, on time, or plain Reached.
+ */
+export function reachedGoalStatus(reachedDate: string, targetDate?: string): { kind: "ahead" | "behind" | "on-track" | "muted"; months: number; label: string } {
+  if (!targetDate) {
+    return { kind: "ahead", months: 0, label: "Reached" };
+  }
+  const [targetYear, targetMonth] = targetDate.split("-").map(Number);
+  const [reachedYear, reachedMonth] = reachedDate.split("-").map(Number);
+  const diff = (targetYear - reachedYear) * 12 + (targetMonth - reachedMonth);
+  if (diff > 0) {
+    return { kind: "ahead", months: diff, label: `Reached · ${diff} month${diff === 1 ? "" : "s"} early` };
+  }
+  if (diff < 0) {
+    const late = -diff;
+    return { kind: "behind", months: late, label: `Reached · ${late} month${late === 1 ? "" : "s"} late` };
+  }
+  return { kind: "ahead", months: 0, label: "Reached · on time" };
+}
+
