@@ -60,6 +60,31 @@ export function formatPercent(value: number | null | undefined, masked: boolean)
   return `${(value * 100).toFixed(1)}%`;
 }
 
+/** Monthly amount rendered in lakhs to one decimal, e.g. "₹3.7 L". */
+export function formatLakhsPerMonth(value: number | null | undefined, masked = false) {
+  if (value === null || value === undefined) return "N/A";
+  if (masked) return "₹ ••••";
+  const sign = value < 0 ? "−" : "";
+  const lakhs = Math.round(Math.abs(value) / 100_000 * 10) / 10;
+  return `${sign}₹${lakhs.toFixed(1)}\u202fL`;
+}
+
+/** Next snapshot due date after the latest snapshot, from the reminder day, e.g. "1 Dec". */
+export function formatNextDueLabel(latestDate: string, reminderDay: number, now = new Date()) {
+  const [latestYear, latestMonth, latestDay] = latestDate.split("-").map(Number);
+  const day = Math.min(Math.max(Math.round(reminderDay), 1), 31);
+  for (let offset = 0; offset <= 12; offset += 1) {
+    const total = latestYear * 12 + (latestMonth - 1) + offset;
+    const year = Math.floor(total / 12);
+    const month = (total % 12) + 1;
+    const dueDay = Math.min(day, new Date(Date.UTC(year, month, 0)).getUTCDate());
+    if (year === latestYear && month === latestMonth && dueDay <= latestDay) continue;
+    const monthLabel = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, dueDay)));
+    return year === now.getFullYear() ? `${dueDay} ${monthLabel}` : `${dueDay} ${monthLabel} ${year}`;
+  }
+  return null;
+}
+
 export function formatDateLabel(value: string, includeYear = true) {
   const [year, month, day] = value.split("-").map(Number);
   const monthName = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));

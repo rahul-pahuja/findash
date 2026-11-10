@@ -116,34 +116,82 @@ export function Charts({ response, dataset, masked, themeMode, chartRange, onCha
     plugins: {
       legend: { display: false },
       tooltip: {
+        enabled: false,
         filter(context) { return context.datasetIndex < 2; },
-        backgroundColor: themeMode === "dark" ? "#252622" : "#FFFFFF",
-        borderColor: themeMode === "dark" ? "#41413A" : "#DAD6CD",
-        borderWidth: 1,
-        cornerRadius: 12,
-        displayColors: false,
-        padding: { top: 8, right: 10, bottom: 8, left: 10 },
-        titleFont: { size: 10, weight: 600 },
-        bodyFont: { size: 11, weight: 550 },
-        titleColor: themeMode === "dark" ? "#AAA69C" : "#6B6860",
-        bodyColor: themeMode === "dark" ? "#F4F2ED" : "#111111",
-        callbacks: {
-          title(items) {
-            const timestamp = Number(items[0]?.parsed.x ?? 0);
-            const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
-            return entry ? formatDateLabel(entry.date) : "Snapshot";
-          },
-          label(context) {
-            const value = Number(context.parsed.y);
-            return `${context.dataset.label}: ${formatCurrency(value, masked)}`;
-          },
-          afterBody(items) {
-            const timestamp = Number(items[0]?.parsed.x ?? 0);
-            const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
-            if (!entry?.expensesNote) return [];
-            const note = (entry.expensesNote ?? "").trim();
-            return [`Note: ${note.length > 78 ? `${note.slice(0, 75).trimEnd()}…` : note}`];
+        external(context) {
+          const { chart, tooltip } = context;
+          let tooltipEl = chart.canvas.parentNode?.querySelector(".apple-chart-tooltip") as HTMLElement | null;
+
+          if (!tooltipEl) {
+            tooltipEl = document.createElement("div");
+            tooltipEl.className = "apple-chart-tooltip";
+            chart.canvas.parentNode?.appendChild(tooltipEl);
           }
+
+          if (tooltip.opacity === 0) {
+            tooltipEl.style.opacity = "0";
+            return;
+          }
+
+          if (tooltip.body) {
+            const timestamp = Number(tooltip.dataPoints[0]?.parsed.x ?? 0);
+            const entry = progressionEntries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
+            const dateText = entry ? formatDateLabel(entry.date).toUpperCase() : "";
+
+            const nwPoint = tooltip.dataPoints.find((dp) => dp.datasetIndex === 0);
+            const hcPoint = tooltip.dataPoints.find((dp) => dp.datasetIndex === 1);
+            const nwVal = nwPoint ? Number(nwPoint.parsed.y) : null;
+            const hcVal = hcPoint ? Number(hcPoint.parsed.y) : null;
+            const note = entry?.expensesNote?.trim();
+
+            let html = `<div class="apple-chart-tooltip-date">${dateText}</div>`;
+            html += `<div class="apple-chart-tooltip-rows">`;
+            if (nwVal !== null) {
+              html += `
+                <div class="apple-chart-tooltip-row">
+                  <span class="apple-chart-tooltip-metric">
+                    <i class="dot is-networth"></i> Net worth
+                  </span>
+                  <span class="apple-chart-tooltip-val">${formatCurrency(nwVal, masked)}</span>
+                </div>`;
+            }
+            if (hcVal !== null) {
+              html += `
+                <div class="apple-chart-tooltip-row">
+                  <span class="apple-chart-tooltip-metric">
+                    <i class="dot is-hardcapital"></i> Hard capital
+                  </span>
+                  <span class="apple-chart-tooltip-val">${formatCurrency(hcVal, masked)}</span>
+                </div>`;
+            }
+            html += `</div>`;
+
+            if (note) {
+              html += `
+                <div class="apple-chart-tooltip-note">
+                  <p class="apple-chart-tooltip-note-text">${note}</p>
+                </div>`;
+            }
+
+            tooltipEl.innerHTML = html;
+          }
+
+          const { offsetLeft: positionX, offsetTop: positionY } = chart.canvas;
+          const tooltipWidth = tooltipEl.offsetWidth || 230;
+          const tooltipHeight = tooltipEl.offsetHeight || 110;
+          const parentWidth = (chart.canvas.parentNode as HTMLElement)?.offsetWidth || chart.width;
+
+          let left = positionX + tooltip.caretX - tooltipWidth / 2;
+          left = Math.max(8, Math.min(parentWidth - tooltipWidth - 8, left));
+
+          let top = positionY + tooltip.caretY - tooltipHeight - 14;
+          if (top < 8) {
+            top = positionY + tooltip.caretY + 14;
+          }
+
+          tooltipEl.style.left = `${left}px`;
+          tooltipEl.style.top = `${top}px`;
+          tooltipEl.style.opacity = "1";
         }
       }
     },

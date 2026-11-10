@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Entry } from "../lib/types";
 import { ASSET_KEYS, ASSET_LABELS } from "../utils/config";
-import { formatCurrency, formatDateLabel, formatSigned, formatSignedPercent } from "../utils/format";
+import { formatCompactCurrency, formatCurrency, formatDateLabel, formatSigned, formatSignedPercent } from "../utils/format";
 import { FormInput, SegmentedControl } from "./FormControls";
+import { DatePickerModal } from "./DatePickerModal";
+import { AlertModal } from "./AlertModal";
 
 interface Props {
   open: boolean;
@@ -12,6 +14,7 @@ interface Props {
   entries: Entry[];
   onClose: () => void;
   onSave: (entry: Entry) => void;
+  onDelete?: (id: string) => void;
 }
 
 function localToday() {
@@ -64,7 +67,7 @@ function dateLabel(date: string) {
   return formatDateLabel(date);
 }
 
-export function DataEntryModal({ open, entry, initialDate, masked, entries, onClose, onSave }: Props) {
+export function DataEntryModal({ open, entry, initialDate, masked, entries, onClose, onSave, onDelete }: Props) {
   const [draft, setDraft] = useState<Entry>(emptyEntry());
   const [noteOpen, setNoteOpen] = useState(false);
   const [editingAmounts, setEditingAmounts] = useState<Record<string, string>>({});
@@ -72,8 +75,10 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   const [oneOffAmount, setOneOffAmount] = useState("");
   const [oneOffType, setOneOffType] = useState<"inflow" | "outflow">("inflow");
   const [oneOffOpen, setOneOffOpen] = useState(false);
-  const dateInputRef = useRef<HTMLInputElement>(null);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const contentRef = useRef<HTMLElement>(null);
+  const dateBtnRef = useRef<HTMLButtonElement>(null);
   const initialDraftRef = useRef<string>("");
   const dirtyRef = useRef(false);
   const cancelRef = useRef<() => void>(() => {});
@@ -188,6 +193,7 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
   const snapshotChange = previousEntry ? netWorth - netWorthFor(previousEntry) : null;
   const capitalChange = previousEntry ? hardCapitalFor(draft) - hardCapitalFor(previousEntry) : null;
   const unrealizedChange = snapshotChange !== null && capitalChange !== null ? snapshotChange - capitalChange : null;
+  const daysSinceLast = previousEntry ? Math.round((Date.parse(`${draft.date}T00:00:00Z`) - Date.parse(`${previousEntry.date}T00:00:00Z`)) / (1000 * 60 * 60 * 24)) : 0;
   const formattedDate = draft.date ? dateLabel(draft.date) : "Select date";
   const isToday = draft.date === localToday();
   const hasCarryForward = entries.some((item) => item.date <= localToday());
@@ -241,31 +247,33 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
                 {formatSigned(snapshotChange, masked)} since {previousEntry ? dateLabel(previousEntry.date) : "previous snapshot"}
               </span>
             )}
-            {capitalChange !== null && unrealizedChange !== null ? <span className="snapshot-movement-summary">Hard capital {formatSigned(capitalChange, masked)} · unrealized gain {formatSigned(unrealizedChange, masked)}</span> : null}
+            {capitalChange !== null && unrealizedChange !== null ? (
+              <span className="snapshot-movement-summary">
+                {capitalChange >= 0 ? `You added ${formatCompactCurrency(capitalChange, masked)}` : `You drew ${formatCompactCurrency(Math.abs(capitalChange), masked)}`} · markets {formatSigned(unrealizedChange, masked)}
+              </span>
+            ) : null}
           </section>
 
           <div className="snapshot-date-panel">
             <div className="snapshot-date-control-wrap">
-            <button type="button" className="snapshot-date-control" onClick={() => {
-              const input = dateInputRef.current;
-              if (!input) return;
-              try {
-                if (typeof input.showPicker === "function") input.showPicker();
-                else { input.focus(); input.click(); }
-              } catch {
-                input.focus();
-                input.click();
-              }
-            }} aria-label={`Change snapshot date, currently ${formattedDate}`}>
-              <span>{!entry && isToday ? `Today, ${formattedDate}` : formattedDate}</span>
-              <span className="snapshot-date-chevron" aria-hidden="true">⌄</span>
-            </button>
-            <input ref={dateInputRef} id="snapshot-date" className="snapshot-date-input" type="date" value={draft.date} aria-label="Snapshot date" tabIndex={-1} onClick={(event) => {
-              const input = event.currentTarget;
-              try { if (typeof input.showPicker === "function") input.showPicker(); } catch { /* Native click remains the fallback. */ }
-            }} onChange={(event) => handleBase("date", event.target.value)} />
+              <button
+                ref={dateBtnRef}
+                type="button"
+                className="snapshot-date-control"
+                onClick={() => setDatePickerOpen(true)}
+                aria-label={`Change snapshot date, currently ${formattedDate}`}
+              >
+                <span>{!entry && isToday ? `Today, ${formattedDate}` : formattedDate}</span>
+                <span className="snapshot-date-chevron" aria-hidden="true">⌄</span>
+              </button>
             </div>
           </div>
+
+          {!entry && daysSinceLast >= 28 ? (
+            <aside className="snapshot-overdue-banner">
+              {daysSinceLast} days since your last snapshot. October slipped by. Welcome back.
+            </aside>
+          ) : null}
 
           <section className="snapshot-editor-section" aria-labelledby="snapshot-balances-heading">
             <div className="snapshot-editor-section-heading">
@@ -336,8 +344,10 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
               onClick={() => setNoteOpen((value) => !value)}
             >
               <span aria-hidden="true">{noteOpen ? "−" : "+"}</span>
-              <span id="snapshot-notes-heading">{draft.expensesNote ? "Edit note" : "Add a note"}</span>
-              {!noteOpen ? <span className="snapshot-note-hint">Shows as a marker on your charts</span> : null}
+              <span id="snapshot-notes-heading">{draft.expensesNote ? "Note" : "Add a note"}</span>
+              <span className="snapshot-note-hint">
+                {draft.expensesNote ? draft.expensesNote : "Shows as a marker on your charts"}
+              </span>
             </button>
             {noteOpen && (
               <div id="snapshot-note-content" className="snapshot-note-content field entry-field">
@@ -347,11 +357,53 @@ export function DataEntryModal({ open, entry, initialDate, masked, entries, onCl
               </div>
             )}
           </section>
+
+          {entry && onDelete ? (
+            <button
+              type="button"
+              className="snapshot-delete-trigger"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <span>Delete snapshot</span>
+              <span aria-hidden="true">›</span>
+            </button>
+          ) : null}
+
           <p className="snapshot-carry-forward">
             {entry ? "Update the values recorded for this date." : hasCarryForward ? "Values are carried over from your last snapshot. Change only what moved." : "Enter your balances and investment values for this date."}
           </p>
         </div>
       </section>
+
+      {/* Date Picker Modal */}
+      <DatePickerModal
+        open={datePickerOpen}
+        value={draft.date}
+        anchorEl={dateBtnRef.current}
+        onSelect={(selectedDate) => {
+          handleBase("date", selectedDate);
+          setDatePickerOpen(false);
+        }}
+        onClose={() => setDatePickerOpen(false)}
+      />
+
+      {/* Delete Snapshot Confirmation Alert (Page 15) */}
+      <AlertModal
+        open={deleteConfirmOpen}
+        title={`Delete the ${formatDateLabel(draft.date)} snapshot?`}
+        description={`${formatCurrency(netWorth, masked)}${draft.expensesNote ? ` and its note “${draft.expensesNote}”` : ""} will be removed, and charts will recalculate.`}
+        actionLabel="Delete snapshot"
+        cancelLabel="Cancel"
+        variant="danger"
+        onCancel={() => setDeleteConfirmOpen(false)}
+        onAction={() => {
+          setDeleteConfirmOpen(false);
+          if (entry && onDelete) {
+            onDelete(entry.id || entry.date);
+          }
+          onClose();
+        }}
+      />
     </div>
   );
 }

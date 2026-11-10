@@ -45,7 +45,7 @@ export function TopBar(props: TopBarProps) {
         <button className="btn btn-ghost text-xs font-bold uppercase tracking-widest" onClick={props.onToggleTheme}>
           {props.themeMode === "dark" ? "Light" : "Dark"}
         </button>
-        <button className="btn btn-outline h-9" onClick={props.onLoad} title="Sync with data.json">Sync</button>
+        <button className="btn btn-outline h-9" onClick={props.onLoad} title="Sync with saved data">Sync</button>
         <button className="btn btn-outline h-9 px-2" onClick={props.onSystemLoad} title="Load any .json file">📁</button>
         <button className="btn btn-primary h-9" onClick={props.onSave}>Save</button>
       </div>

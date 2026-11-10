@@ -59,7 +59,7 @@ export function ControlBar(props: ControlBarProps) {
           )}
         </button>
 
-        <button className="toolbar-icon-button" type="button" onClick={props.onLoad} title="Reload data.json" aria-label="Reload data from file">
+        <button className="toolbar-icon-button" type="button" onClick={props.onLoad} title="Reload saved data" aria-label="Reload saved data">
           <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.8-3L4 10m0-5v5h5m-5 3a8 8 0 0 0 14.8 3L20 14m0 5v-5h-5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </button>
 

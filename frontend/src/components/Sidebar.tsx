@@ -62,7 +62,7 @@ function RailAction({ label, icon, onClick, className = "", pressed, status, cur
 export function Sidebar({ page, navigate, onAdd, privateMode, onTogglePrivate, themeMode, onToggleTheme, statusText, isDirty, savedAt, onSave, onReload, onImport, onExport }: Props) {
   const active = (routePages: readonly string[]) => routePages.includes(page);
   const savedTime = savedAt ? new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
-  const saveTooltip = isDirty ? "Unsaved changes · Save to data.json ⌘S" : savedTime ? `Saved ${savedTime} · Save to data.json` : statusText === "Offline" ? "Saved on this device · Save to data.json" : "Saved · Save to data.json";
+  const saveTooltip = isDirty ? "Unsaved changes · Save ⌘S" : savedTime ? `Saved at ${savedTime} · Save ⌘S` : statusText === "Offline" ? "Saved on this device · Save ⌘S" : "Saved · Save ⌘S";
 
   return <>
     <aside className="app-sidebar" aria-label="Primary navigation">
@@ -72,7 +72,7 @@ export function Sidebar({ page, navigate, onAdd, privateMode, onTogglePrivate, t
       </nav>
       <nav className="rail-capsule rail-data-actions" aria-label="JSON file controls">
         <RailAction label={saveTooltip} icon="save" onClick={onSave} status={isDirty ? "dirty" : "saved"} className="rail-save-action" />
-        <RailAction label="Reload data.json" icon="reload" onClick={onReload} />
+        <RailAction label="Reload saved data" icon="reload" onClick={onReload} />
         <RailAction label="Import JSON" icon="import" onClick={onImport} />
         <RailAction label="Export JSON" icon="export" onClick={onExport} />
       </nav>

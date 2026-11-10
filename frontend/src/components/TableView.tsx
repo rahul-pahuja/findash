@@ -95,7 +95,15 @@ export function TableView({ entries, allEntries = entries, masked, onEdit, maxRo
       </div>
       {!compact ? <div className="snapshot-pagination">
         <span>Showing {visibleEntries.length} of {sortedEntries.length}</span>
-        {visibleEntries.length < sortedEntries.length ? <button className="quiet-button" type="button" onClick={() => setVisibleCount((count) => Math.min(sortedEntries.length, count + 7))}>Show more</button> : null}
+        {visibleEntries.length < sortedEntries.length ? (
+          <button
+            className="snapshot-show-more-btn"
+            type="button"
+            onClick={() => setVisibleCount((count) => Math.min(sortedEntries.length, count + 7))}
+          >
+            Show more
+          </button>
+        ) : null}
       </div> : null}
     </div>
   );

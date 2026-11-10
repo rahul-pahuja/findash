@@ -84,23 +84,67 @@ export function AnalyticsDashboard({ response, returns, returnsLoading, masked, 
     plugins: {
       legend: { display: false },
       tooltip: {
-        backgroundColor: themeMode === "dark" ? "#252622" : "#FFFFFF",
-        borderColor: themeMode === "dark" ? "#41413A" : "#DAD6CD",
-        borderWidth: 1,
-        cornerRadius: 12,
-        displayColors: false,
-        padding: 12,
-        titleFont: { size: 10, weight: 600 },
-        bodyFont: { size: 13, weight: 700 },
-        titleColor: themeMode === "dark" ? "#AAA69C" : "#6B6860",
-        bodyColor: themeMode === "dark" ? "#F4F2ED" : "#111111",
-        callbacks: {
-          title(items) {
-            const timestamp = Number(items[0]?.parsed.x ?? 0);
+        enabled: false,
+        external(context) {
+          const { chart, tooltip } = context;
+          let tooltipEl = chart.canvas.parentNode?.querySelector(".apple-chart-tooltip") as HTMLElement | null;
+
+          if (!tooltipEl) {
+            tooltipEl = document.createElement("div");
+            tooltipEl.className = "apple-chart-tooltip";
+            chart.canvas.parentNode?.appendChild(tooltipEl);
+          }
+
+          if (tooltip.opacity === 0) {
+            tooltipEl.style.opacity = "0";
+            return;
+          }
+
+          if (tooltip.body) {
+            const timestamp = Number(tooltip.dataPoints[0]?.parsed.x ?? 0);
             const entry = entries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === timestamp);
-            return entry ? fullDate(entry.date) : "Snapshot";
-          },
-          label(context) { return `Net worth: ${formatCurrency(Number(context.parsed.y), masked)}`; }
+            const dateText = entry ? formatDateLabel(entry.date).toUpperCase() : "";
+
+            const nwVal = Number(tooltip.dataPoints[0]?.parsed.y ?? 0);
+            const note = entry?.expensesNote?.trim();
+
+            let html = `<div class="apple-chart-tooltip-date">${dateText}</div>`;
+            html += `<div class="apple-chart-tooltip-rows">`;
+            html += `
+              <div class="apple-chart-tooltip-row">
+                <span class="apple-chart-tooltip-metric">
+                  <i class="dot is-networth"></i> Net worth
+                </span>
+                <span class="apple-chart-tooltip-val">${formatCurrency(nwVal, masked)}</span>
+              </div>`;
+            html += `</div>`;
+
+            if (note) {
+              html += `
+                <div class="apple-chart-tooltip-note">
+                  <p class="apple-chart-tooltip-note-text">${note}</p>
+                </div>`;
+            }
+
+            tooltipEl.innerHTML = html;
+          }
+
+          const { offsetLeft: positionX, offsetTop: positionY } = chart.canvas;
+          const tooltipWidth = tooltipEl.offsetWidth || 210;
+          const tooltipHeight = tooltipEl.offsetHeight || 80;
+          const parentWidth = (chart.canvas.parentNode as HTMLElement)?.offsetWidth || chart.width;
+
+          let left = positionX + tooltip.caretX - tooltipWidth / 2;
+          left = Math.max(8, Math.min(parentWidth - tooltipWidth - 8, left));
+
+          let top = positionY + tooltip.caretY - tooltipHeight - 14;
+          if (top < 8) {
+            top = positionY + tooltip.caretY + 14;
+          }
+
+          tooltipEl.style.left = `${left}px`;
+          tooltipEl.style.top = `${top}px`;
+          tooltipEl.style.opacity = "1";
         }
       }
     },
@@ -259,7 +303,33 @@ function AssetTrend({ asset, entries, masked, tone, chartLabel, chartGrid }: { a
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
-    plugins: { legend: { display: false }, tooltip: { backgroundColor: chartLabel === "#AAA9A2" ? "#252622" : "#FFFFFF", borderColor: chartLabel === "#AAA9A2" ? "#41413A" : "#DAD6CD", borderWidth: 1, cornerRadius: 12, displayColors: false, padding: 12, titleFont: { size: 10, weight: 600 }, bodyFont: { size: 13, weight: 700 }, titleColor: chartLabel, bodyColor: chartLabel === "#AAA9A2" ? "#F4F2ED" : "#111111", callbacks: { title(items) { const entry = entries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === Number(items[0]?.parsed.x ?? 0)); return entry ? fullDate(entry.date) : "Snapshot"; }, label(context) { return `${ASSET_LABELS[asset]}: ${formatSigned(Number(context.parsed.y), masked)}`; } } } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: chartLabel === "#AAA9A2" ? "#1E1F1C" : "#FFFFFF",
+        borderColor: chartLabel === "#AAA9A2" ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.10)",
+        borderWidth: 1,
+        cornerRadius: 14,
+        displayColors: false,
+        padding: { top: 10, right: 14, bottom: 10, left: 14 },
+        titleFont: { size: 10, weight: 700 },
+        bodyFont: { size: 14, weight: 700 },
+        titleColor: chartLabel,
+        bodyColor: chartLabel === "#AAA9A2" ? "#F4F2ED" : "#111111",
+        callbacks: {
+          title(items) {
+            const entry = entries.find((item) => Date.parse(`${item.date}T00:00:00Z`) === Number(items[0]?.parsed.x ?? 0));
+            return entry ? formatDateLabel(entry.date).toUpperCase() : "SNAPSHOT";
+          },
+          label(context) {
+            return formatSigned(Number(context.parsed.y), masked);
+          },
+          afterLabel() {
+            return `${ASSET_LABELS[asset]} gain/loss`;
+          }
+        }
+      }
+    },
     scales: {
       x: { type: "linear", grid: { display: false }, border: { display: false }, ticks: { display: false } },
       y: { position: "right", min: axis.min, max: axis.max, grid: { color: chartGrid }, border: { display: false }, ticks: { maxTicksLimit: 3, stepSize: axis.step, color: chartLabel, callback(value) { return masked ? "" : formatCompactCurrency(Number(value), false); } } }
